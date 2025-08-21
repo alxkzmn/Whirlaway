@@ -61,7 +61,7 @@ fn bench(c: &mut Criterion) {
     };
 
     // Benchmark different trace sizes
-    for log_n_rows in [7, 8, 9, 10] {
+    for log_n_rows in [6, 7, 8, 9] {
         group.bench_with_input(
             BenchmarkId::from_parameter(log_n_rows),
             &log_n_rows,
