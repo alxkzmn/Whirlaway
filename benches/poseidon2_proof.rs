@@ -1,6 +1,6 @@
 use air::AirSettings;
 use air::table::AirTable;
-use criterion::{BatchSize, BenchmarkId, Criterion, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use p3_challenger::DuplexChallenger;
 use p3_field::extension::BinomialExtensionField;
 use p3_koala_bear::{GenericPoseidon2LinearLayersKoalaBear, KoalaBear, Poseidon2KoalaBear};
@@ -25,7 +25,7 @@ type MyChallenger = DuplexChallenger<F, Poseidon16, 16, 8>;
 type F = KoalaBear;
 type EF = BinomialExtensionField<F, 8>;
 type LinearLayers = GenericPoseidon2LinearLayersKoalaBear;
-const SBOX_DEGREE: u64 = 3;
+const SBOX_DEGREE: u64 = 5;
 const SBOX_REGISTERS: usize = 0;
 const HALF_FULL_ROUNDS: usize = 4;
 const PARTIAL_ROUNDS: usize = 20;
@@ -66,14 +66,34 @@ fn bench(c: &mut Criterion) {
             BenchmarkId::from_parameter(log_n_rows),
             &log_n_rows,
             |b, log_n_rows| {
-                b.iter_batched(
-                    || {
-                        let n_rows = 1 << log_n_rows;
-                        let inputs: Vec<[F; WIDTH]> = (0..n_rows)
-                            .map(|_| std::array::from_fn(|_| rng.random()))
-                            .collect();
+                b.iter(|| {
+                    // The witness generation is included because ProveKit doesn't separate witness generation and proving.
 
-                        let witness_matrix = generate_trace_rows::<
+                    let n_rows = 1 << log_n_rows;
+                    let inputs: Vec<[F; WIDTH]> = (0..n_rows)
+                        .map(|_| std::array::from_fn(|_| rng.random()))
+                        .collect();
+
+                    let witness_matrix = generate_trace_rows::<
+                        F,
+                        LinearLayers,
+                        WIDTH,
+                        SBOX_DEGREE,
+                        SBOX_REGISTERS,
+                        HALF_FULL_ROUNDS,
+                        PARTIAL_ROUNDS,
+                    >(inputs, &constants, 0)
+                    .transpose();
+
+                    let mut witness = witness_matrix
+                        .rows()
+                        .map(|col| whir_p3::poly::evals::EvaluationsList::new(col.collect()))
+                        .collect::<Vec<_>>();
+
+                    let preprocessed_columns = witness.drain(..0).collect::<Vec<_>>(); // No preprocessed columns
+
+                    let table = AirTable::<F, EF, _>::new(
+                        Poseidon2Air::<
                             F,
                             LinearLayers,
                             WIDTH,
@@ -81,71 +101,36 @@ fn bench(c: &mut Criterion) {
                             SBOX_REGISTERS,
                             HALF_FULL_ROUNDS,
                             PARTIAL_ROUNDS,
-                        >(inputs, &constants, 0)
-                        .transpose();
+                        >::new(constants.clone()),
+                        *log_n_rows,
+                        settings.univariate_skips,
+                        preprocessed_columns,
+                        3,
+                    );
 
-                        let mut witness = witness_matrix
-                            .rows()
-                            .map(|col| whir_p3::poly::evals::EvaluationsList::new(col.collect()))
-                            .collect::<Vec<_>>();
+                    let poseidon16 = Poseidon16::new_from_rng_128(&mut rng);
+                    let poseidon24 = Poseidon24::new_from_rng_128(&mut rng);
+                    let merkle_hash = MerkleHash::new(poseidon24);
+                    let merkle_compress = MerkleCompress::new(poseidon16.clone());
 
-                        let preprocessed_columns = witness.drain(..0).collect::<Vec<_>>(); // No preprocessed columns
+                    let whir_params: WhirConfig<_, _, _, _, MyChallenger> = table
+                        .build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
+                    let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
+                    domainsep.commit_statement::<_, _, _, 8>(&whir_params);
+                    domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
-                        let table = AirTable::<F, EF, _>::new(
-                            Poseidon2Air::<
-                                F,
-                                LinearLayers,
-                                WIDTH,
-                                SBOX_DEGREE,
-                                SBOX_REGISTERS,
-                                HALF_FULL_ROUNDS,
-                                PARTIAL_ROUNDS,
-                            >::new(constants.clone()),
-                            *log_n_rows,
-                            settings.univariate_skips,
-                            preprocessed_columns,
-                            3,
-                        );
+                    let challenger = MyChallenger::new(poseidon16);
 
-                        let poseidon16 = Poseidon16::new_from_rng_128(&mut rng);
-                        let poseidon24 = Poseidon24::new_from_rng_128(&mut rng);
-                        let merkle_hash = MerkleHash::new(poseidon24);
-                        let merkle_compress = MerkleCompress::new(poseidon16.clone());
-
-                        let whir_params: WhirConfig<_, _, _, _, MyChallenger> = table
-                            .build_whir_params(
-                                &settings,
-                                merkle_hash.clone(),
-                                merkle_compress.clone(),
-                            );
-                        let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
-                        domainsep.commit_statement::<_, _, _, 8>(&whir_params);
-                        domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
-
-                        let challenger = MyChallenger::new(poseidon16);
-
-                        (
-                            table,
-                            witness,
-                            merkle_hash,
-                            merkle_compress,
-                            domainsep,
-                            challenger,
-                        )
-                    },
-                    |(table, witness, merkle_hash, merkle_compress, domainsep, challenger)| {
-                        let mut prover_state = domainsep.to_prover_state(challenger.clone());
-                        table.prove(
-                            &settings,
-                            merkle_hash,
-                            merkle_compress,
-                            &mut prover_state,
-                            witness,
-                        );
-                        prover_state
-                    },
-                    BatchSize::LargeInput,
-                );
+                    let mut prover_state = domainsep.to_prover_state(challenger.clone());
+                    table.prove(
+                        &settings,
+                        merkle_hash,
+                        merkle_compress,
+                        &mut prover_state,
+                        witness,
+                    );
+                    prover_state
+                });
             },
         );
     }

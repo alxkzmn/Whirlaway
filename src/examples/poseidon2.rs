@@ -30,7 +30,7 @@ type MyChallenger = DuplexChallenger<F, Poseidon16, 16, 8>;
 type F = KoalaBear;
 type EF = BinomialExtensionField<F, 8>;
 type LinearLayers = GenericPoseidon2LinearLayersKoalaBear;
-const SBOX_DEGREE: u64 = 3;
+const SBOX_DEGREE: u64 = 5;
 const SBOX_REGISTERS: usize = 0;
 const HALF_FULL_ROUNDS: usize = 4;
 const PARTIAL_ROUNDS: usize = 20;
@@ -172,21 +172,25 @@ pub fn prove_poseidon2(
     // let proof_size = prover_state.narg_string().len();
 
     let prover_time = t.elapsed();
-    let time = Instant::now();
-
-    let mut verifier_state =
-        domainsep.to_verifier_state(prover_state.proof_data().to_vec(), challenger);
-
-    table
-        .verify(
-            &settings,
-            merkle_hash,
-            merkle_compress,
-            &mut verifier_state,
-            log_n_rows,
-        )
-        .unwrap();
-    let verifier_time = time.elapsed();
+    let verify_enabled = std::env::var("VERIFY")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(true);
+    let mut verifier_time = Duration::ZERO;
+    if verify_enabled {
+        let time = Instant::now();
+        let mut verifier_state =
+            domainsep.to_verifier_state(prover_state.proof_data().to_vec(), challenger);
+        table
+            .verify(
+                &settings,
+                merkle_hash,
+                merkle_compress,
+                &mut verifier_state,
+                log_n_rows,
+            )
+            .unwrap();
+        verifier_time = time.elapsed();
+    }
 
     let proof_size = prover_state.proof_data().len() as f64 * (F::ORDER_U64 as f64).log2() / 8.0;
 

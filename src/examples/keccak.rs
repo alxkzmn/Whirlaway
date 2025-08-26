@@ -153,21 +153,25 @@ pub fn prove_keccak(
     // let proof_size = prover_state.narg_string().len();
 
     let prover_time = t.elapsed();
-    let time = Instant::now();
-
-    let mut verifier_state =
-        domainsep.to_verifier_state(prover_state.proof_data().to_vec(), challenger);
-
-    table
-        .verify(
-            &settings,
-            merkle_hash,
-            merkle_compress,
-            &mut verifier_state,
-            log_length,
-        )
-        .unwrap();
-    let verifier_time = time.elapsed();
+    let verify_enabled = std::env::var("VERIFY")
+        .map(|v| matches!(v.as_str(), "1" | "true" | "TRUE" | "yes" | "YES"))
+        .unwrap_or(true);
+    let mut verifier_time = Duration::ZERO;
+    if verify_enabled {
+        let time = Instant::now();
+        let mut verifier_state =
+            domainsep.to_verifier_state(prover_state.proof_data().to_vec(), challenger);
+        table
+            .verify(
+                &settings,
+                merkle_hash,
+                merkle_compress,
+                &mut verifier_state,
+                log_length,
+            )
+            .unwrap();
+        verifier_time = time.elapsed();
+    }
 
     let proof_size = prover_state.proof_data().len() as f64 * (F::ORDER_U64 as f64).log2() / 8.0;
 
