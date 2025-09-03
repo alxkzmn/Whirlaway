@@ -22,7 +22,7 @@ dependencies = [
  "p3-symmetric",
  "p3-uni-stark",
  "p3-util",
- "rand",
+ "rand 0.9.1",
  "rayon",
  "serde",
  "sumcheck",
@@ -274,6 +274,17 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "getrandom"
+version = "0.2.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "335ff9f135e4384c8150d6f27c6daed433577f86b4750418338c01a1a2528592"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "wasi 0.11.1+wasi-snapshot-preview1",
+]
+
+[[package]]
+name = "getrandom"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26145e563e54f2cadc477553f1ec5ee650b00862f0a58bcd12cbdc5f0ea2d2f4"
@@ -281,7 +292,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi",
- "wasi",
+ "wasi 0.14.2+wasi-0.2.4",
 ]
 
 [[package]]
@@ -355,6 +366,19 @@ checksum = "1cfaf33c695fc6e08064efbc1f72ec937429614f25eef83af942d0e227c3a28f"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "keccak_air"
+version = "0.1.0"
+dependencies = [
+ "p3-air",
+ "p3-field",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-util",
+ "rand 0.8.5",
+ "tracing",
 ]
 
 [[package]]
@@ -471,7 +495,7 @@ dependencies = [
  "p3-monty-31",
  "p3-poseidon2",
  "p3-symmetric",
- "rand",
+ "rand 0.9.1",
 ]
 
 [[package]]
@@ -523,7 +547,7 @@ dependencies = [
  "p3-maybe-rayon",
  "p3-util",
  "paste",
- "rand",
+ "rand 0.9.1",
  "serde",
  "tracing",
 ]
@@ -541,7 +565,7 @@ dependencies = [
  "p3-symmetric",
  "p3-util",
  "paste",
- "rand",
+ "rand 0.9.1",
  "serde",
 ]
 
@@ -557,20 +581,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "p3-keccak-air"
-version = "0.3.0"
-source = "git+https://github.com/Plonky3/Plonky3.git?rev=d0c4a36#d0c4a36a0df1b49b9599cca490dc4c0fc26aa43c"
-dependencies = [
- "p3-air",
- "p3-field",
- "p3-matrix",
- "p3-maybe-rayon",
- "p3-util",
- "rand",
- "tracing",
-]
-
-[[package]]
 name = "p3-koala-bear"
 version = "0.3.0"
 source = "git+https://github.com/Plonky3/Plonky3.git?rev=d0c4a36#d0c4a36a0df1b49b9599cca490dc4c0fc26aa43c"
@@ -579,7 +589,7 @@ dependencies = [
  "p3-monty-31",
  "p3-poseidon2",
  "p3-symmetric",
- "rand",
+ "rand 0.9.1",
 ]
 
 [[package]]
@@ -591,7 +601,7 @@ dependencies = [
  "p3-field",
  "p3-maybe-rayon",
  "p3-util",
- "rand",
+ "rand 0.9.1",
  "serde",
  "tracing",
  "transpose",
@@ -614,7 +624,7 @@ dependencies = [
  "p3-field",
  "p3-symmetric",
  "p3-util",
- "rand",
+ "rand 0.9.1",
 ]
 
 [[package]]
@@ -629,7 +639,7 @@ dependencies = [
  "p3-maybe-rayon",
  "p3-symmetric",
  "p3-util",
- "rand",
+ "rand 0.9.1",
  "serde",
  "tracing",
 ]
@@ -650,7 +660,7 @@ dependencies = [
  "p3-symmetric",
  "p3-util",
  "paste",
- "rand",
+ "rand 0.9.1",
  "serde",
  "tracing",
  "transpose",
@@ -665,7 +675,7 @@ dependencies = [
  "p3-mds",
  "p3-symmetric",
  "p3-util",
- "rand",
+ "rand 0.9.1",
 ]
 
 [[package]]
@@ -678,7 +688,7 @@ dependencies = [
  "p3-matrix",
  "p3-maybe-rayon",
  "p3-poseidon2",
- "rand",
+ "rand 0.9.1",
  "tracing",
 ]
 
@@ -794,12 +804,33 @@ checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 
 [[package]]
 name = "rand"
+version = "0.8.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
+dependencies = [
+ "libc",
+ "rand_chacha 0.3.1",
+ "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rand"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9fbfd9d094a40bf3ae768db9361049ace4c0e04a4fd6b359518bd7b73a73dd97"
 dependencies = [
- "rand_chacha",
- "rand_core",
+ "rand_chacha 0.9.0",
+ "rand_core 0.9.3",
+]
+
+[[package]]
+name = "rand_chacha"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
+dependencies = [
+ "ppv-lite86",
+ "rand_core 0.6.4",
 ]
 
 [[package]]
@@ -809,7 +840,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3022b5f1df60f26e1ffddd6c66e8aa15de382ae63b3a0c1bfc0e4d3e3f325cb"
 dependencies = [
  "ppv-lite86",
- "rand_core",
+ "rand_core 0.9.3",
+]
+
+[[package]]
+name = "rand_core"
+version = "0.6.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+dependencies = [
+ "getrandom 0.2.16",
 ]
 
 [[package]]
@@ -818,7 +858,7 @@ version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
 dependencies = [
- "getrandom",
+ "getrandom 0.3.3",
 ]
 
 [[package]]
@@ -974,7 +1014,7 @@ dependencies = [
  "p3-field",
  "p3-koala-bear",
  "p3-matrix",
- "rand",
+ "rand 0.9.1",
  "rayon",
  "tracing",
  "utils",
@@ -1155,7 +1195,7 @@ dependencies = [
  "p3-field",
  "p3-koala-bear",
  "p3-matrix",
- "rand",
+ "rand 0.9.1",
  "rayon",
  "tracing",
  "whir-p3",
@@ -1176,6 +1216,12 @@ dependencies = [
  "same-file",
  "winapi-util",
 ]
+
+[[package]]
+name = "wasi"
+version = "0.11.1+wasi-snapshot-preview1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wasi"
@@ -1274,7 +1320,7 @@ dependencies = [
  "p3-merkle-tree",
  "p3-symmetric",
  "p3-util",
- "rand",
+ "rand 0.9.1",
  "rayon",
  "serde",
  "thiserror 2.0.12",
@@ -1289,17 +1335,17 @@ version = "0.1.0"
 dependencies = [
  "air",
  "criterion",
+ "keccak_air",
  "p3-baby-bear",
  "p3-challenger",
  "p3-field",
- "p3-keccak-air",
  "p3-koala-bear",
  "p3-matrix",
  "p3-poseidon2",
  "p3-poseidon2-air",
  "p3-symmetric",
  "p3-uni-stark",
- "rand",
+ "rand 0.9.1",
  "tracing",
  "tracing-forest",
  "tracing-subscriber",
