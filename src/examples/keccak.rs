@@ -1,9 +1,9 @@
 use ::air::AirSettings;
 use air::table::AirTable;
+use keccak_air::{KeccakAir, generate_trace_rows};
 use p3_challenger::DuplexChallenger;
 use p3_field::PrimeField64;
 use p3_field::extension::BinomialExtensionField;
-use p3_keccak_air::{KeccakAir, generate_trace_rows};
 use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
 use p3_matrix::Matrix;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
@@ -65,7 +65,7 @@ impl fmt::Display for KeccakBenchmark {
         let n_rows = 1 << self.log_n_rows;
         writeln!(
             f,
-            "Proved {} poseidon2 hashes in {:.3} s ({} / s)",
+            "Proved {} keccak hashes in {:.3} s ({} / s)",
             n_rows,
             self.prover_time.as_millis() as f64 / 1000.0,
             (n_rows as f64 / self.prover_time.as_secs_f64()).round() as usize
@@ -76,7 +76,7 @@ impl fmt::Display for KeccakBenchmark {
 }
 
 pub fn prove_keccak(
-    log_length: usize,
+    log_n_rows: usize,
     settings: AirSettings,
     n_preprocessed_columns: usize,
     display_logs: bool,
@@ -92,11 +92,11 @@ pub fn prove_keccak(
             .init();
     }
 
+    let n_rows = 1 << log_n_rows;
+
     let mut rng = StdRng::seed_from_u64(0);
 
     let keccak_air = KeccakAir {};
-
-    let n_rows = 1 << log_length;
 
     let inputs: Vec<[u64; 25]> = (0..n_rows)
         .map(|_| std::array::from_fn(|_| rng.random()))
@@ -109,18 +109,11 @@ pub fn prove_keccak(
         .map(|col| whir_p3::poly::evals::EvaluationsList::new(col.collect()))
         .collect::<Vec<_>>();
 
-    // Compute the actual log length (log2 of number of rows per column) as required by AirTable.
-    let log_length_actual = witness
-        .iter()
-        .map(|w| w.num_variables())
-        .max()
-        .expect("non-empty witness");
-
     let preprocessed_columns = witness.drain(..n_preprocessed_columns).collect::<Vec<_>>();
 
     let table = AirTable::<F, EF, _>::new(
         keccak_air,
-        log_length_actual,
+        (witness_matrix.width().ilog2()) as usize,
         settings.univariate_skips,
         preprocessed_columns,
         3,
@@ -167,7 +160,7 @@ pub fn prove_keccak(
                 merkle_hash,
                 merkle_compress,
                 &mut verifier_state,
-                log_length,
+                log_n_rows,
             )
             .unwrap();
         verifier_time = time.elapsed();
@@ -176,7 +169,7 @@ pub fn prove_keccak(
     let proof_size = prover_state.proof_data().len() as f64 * (F::ORDER_U64 as f64).log2() / 8.0;
 
     KeccakBenchmark {
-        log_n_rows: log_length_actual,
+        log_n_rows,
         settings,
         prover_time,
         verifier_time,
