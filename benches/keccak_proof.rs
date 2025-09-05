@@ -30,19 +30,19 @@ fn bench(c: &mut Criterion) {
     group.sample_size(10);
 
     let settings = AirSettings::new(
-        100, // security bits (kept in sync with HyperPlonk bench)
+        128,
         SecurityAssumption::CapacityBound,
-        FoldingFactor::Constant(4), // identical folding factor
-        1,                          // starting log_inv_rate
-        1,                          // univariate_skips (classic sumcheck, < log_n_rows)
-        3,                          // domain reduction factor
+        FoldingFactor::ConstantFromSecondRound(7, 4),
+        1,
+        4,
+        5,
     );
 
     let mut rng = StdRng::seed_from_u64(0);
     let n_preprocessed_columns = 0;
 
     // Benchmark different trace sizes
-    for log_n_rows in [5, 6, 7, 8, 9] {
+    for log_n_rows in [5, 6, 7, 8] {
         group.bench_with_input(
             BenchmarkId::from_parameter(log_n_rows),
             &log_n_rows,
@@ -65,19 +65,12 @@ fn bench(c: &mut Criterion) {
                         .map(|col| whir_p3::poly::evals::EvaluationsList::new(col.collect()))
                         .collect::<Vec<_>>();
 
-                    // Compute the actual log length (log2 of number of rows per column) as required by AirTable.
-                    let log_length_actual = witness
-                        .iter()
-                        .map(|w| w.num_variables())
-                        .max()
-                        .expect("non-empty witness");
-
                     let preprocessed_columns =
                         witness.drain(..n_preprocessed_columns).collect::<Vec<_>>();
 
                     let table = AirTable::<F, EF, _>::new(
                         keccak_air,
-                        log_length_actual,
+                        (witness_matrix.width().ilog2()) as usize,
                         settings.univariate_skips,
                         preprocessed_columns,
                         3,
@@ -132,19 +125,13 @@ fn bench(c: &mut Criterion) {
                     .map(|col| whir_p3::poly::evals::EvaluationsList::new(col.collect()))
                     .collect::<Vec<_>>();
 
-                // Compute the actual log length (log2 of number of rows per column) as required by AirTable.
-                let log_length_actual = witness
-                    .iter()
-                    .map(|w| w.num_variables())
-                    .max()
-                    .expect("non-empty witness");
-
                 let preprocessed_columns =
                     witness.drain(..n_preprocessed_columns).collect::<Vec<_>>();
 
+                let log_length = (witness_matrix.width().ilog2()) as usize;
                 let table = AirTable::<F, EF, _>::new(
                     keccak_air,
-                    log_length_actual,
+                    log_length,
                     settings.univariate_skips,
                     preprocessed_columns,
                     3,
@@ -183,9 +170,18 @@ fn bench(c: &mut Criterion) {
                     table,
                     merkle_hash,
                     merkle_compress,
+                    log_length,
                 )
             },
-            |(domainsep, prover_state, challenger, table, merkle_hash, merkle_compress)| {
+            |(
+                domainsep,
+                prover_state,
+                challenger,
+                table,
+                merkle_hash,
+                merkle_compress,
+                log_length,
+            )| {
                 let mut verifier_state =
                     domainsep.to_verifier_state(prover_state.proof_data().to_vec(), challenger);
                 table

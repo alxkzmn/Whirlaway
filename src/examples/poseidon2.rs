@@ -142,7 +142,7 @@ pub fn prove_poseidon2(
         log_n_rows,
         settings.univariate_skips,
         preprocessed_columns,
-        3,
+        SBOX_DEGREE as usize,
     );
 
     let poseidon16 = Poseidon16::new_from_rng_128(&mut rng);

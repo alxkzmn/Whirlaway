@@ -9,6 +9,8 @@ use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 use crate::examples::keccak::prove_keccak;
 use crate::examples::poseidon2::prove_poseidon2;
 
+const SECURITY_BITS: usize = 128;
+
 fn main() {
     // Decide which benchmark to run (default: poseidon2)
     let bench_name = std::env::var("WHIR_BENCH").unwrap_or_else(|_| "poseidon2".to_string());
@@ -19,12 +21,12 @@ fn main() {
         .unwrap_or(7);
 
     let settings = AirSettings::new(
-        100, // security bits (kept in sync with HyperPlonk bench)
+        SECURITY_BITS,
         SecurityAssumption::CapacityBound,
-        FoldingFactor::Constant(4), // identical folding factor
-        1,                          // starting log_inv_rate
-        1,                          // univariate_skips (classic sumcheck, < log_n_rows)
-        3,                          // domain reduction factor
+        FoldingFactor::ConstantFromSecondRound(7, 4),
+        1,
+        4,
+        5,
     );
 
     let benchmark: Box<dyn Display> = match bench_name.as_str() {
