@@ -160,7 +160,7 @@ pub fn prove_keccak(
                 merkle_hash,
                 merkle_compress,
                 &mut verifier_state,
-                log_n_rows,
+                (witness_matrix.width().ilog2()) as usize,
             )
             .unwrap();
         verifier_time = time.elapsed();

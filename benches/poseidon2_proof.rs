@@ -51,14 +51,14 @@ fn bench(c: &mut Criterion) {
     >::new(constants.clone());
 
     // Default settings for benchmarking
-    let settings = AirSettings {
-        security_bits: 128,
-        whir_soudness_type: SecurityAssumption::CapacityBound,
-        whir_log_inv_rate: 3,
-        whir_folding_factor: FoldingFactor::Constant(2),
-        univariate_skips: 0,
-        whir_initial_domain_reduction_factor: 1,
-    };
+    let settings = AirSettings::new(
+        128,
+        SecurityAssumption::CapacityBound,
+        FoldingFactor::ConstantFromSecondRound(7, 4),
+        1,
+        4,
+        5,
+    );
 
     // Benchmark different trace sizes
     for log_n_rows in [6, 7, 8, 9] {
