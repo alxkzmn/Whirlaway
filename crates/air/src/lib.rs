@@ -2,9 +2,9 @@
 
 mod prove;
 pub mod table;
-mod uni_skip_utils;
-mod utils;
-mod verify;
+pub mod uni_skip_utils;
+pub mod utils;
+pub mod verify;
 
 const WHIR_POW_BITS: usize = 16;
 
