@@ -9,7 +9,7 @@ use whir_p3::{
 
 use crate::{AirSettings, table::AirTable};
 
-pub(crate) fn matrix_up_lde<F: Field>(point: &[F]) -> F {
+pub fn matrix_up_lde<F: Field>(point: &[F]) -> F {
     /*
         Matrix UP:
 
@@ -36,7 +36,7 @@ pub(crate) fn matrix_up_lde<F: Field>(point: &[F]) -> F {
             * (F::ONE - point[point.len() - 1] * F::TWO)
 }
 
-pub(crate) fn matrix_down_lde<F: Field>(point: &[F]) -> F {
+pub fn matrix_down_lde<F: Field>(point: &[F]) -> F {
     /*
         Matrix DOWN:
 
@@ -137,9 +137,7 @@ fn next_mle<F: Field>(point: &[F]) -> F {
         .sum()
 }
 
-pub(crate) fn columns_up_and_down<F: Field>(
-    columns: &[&EvaluationsList<F>],
-) -> Vec<EvaluationsList<F>> {
+pub fn columns_up_and_down<F: Field>(columns: &[&EvaluationsList<F>]) -> Vec<EvaluationsList<F>> {
     columns
         .par_iter()
         .map(|c| column_up(c))
@@ -147,13 +145,13 @@ pub(crate) fn columns_up_and_down<F: Field>(
         .collect()
 }
 
-pub(crate) fn column_up<F: Field>(column: &EvaluationsList<F>) -> EvaluationsList<F> {
+pub fn column_up<F: Field>(column: &EvaluationsList<F>) -> EvaluationsList<F> {
     let mut up = column.clone();
     up.evals_mut()[column.num_evals() - 1] = up.evals()[column.num_evals() - 2];
     up
 }
 
-pub(crate) fn column_down<F: Field>(column: &EvaluationsList<F>) -> EvaluationsList<F> {
+pub fn column_down<F: Field>(column: &EvaluationsList<F>) -> EvaluationsList<F> {
     let mut down = column.evals()[1..].to_vec();
     down.push(*down.last().unwrap());
     EvaluationsList::new(down)

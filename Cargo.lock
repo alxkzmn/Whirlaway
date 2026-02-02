@@ -15,10 +15,13 @@ dependencies = [
 name = "air"
 version = "0.1.0"
 dependencies = [
+ "keccak_air",
  "p3-air",
  "p3-challenger",
  "p3-field",
  "p3-koala-bear",
+ "p3-matrix",
+ "p3-poseidon2",
  "p3-symmetric",
  "p3-uni-stark",
  "p3-util",
@@ -374,11 +377,15 @@ version = "0.1.0"
 dependencies = [
  "p3-air",
  "p3-field",
+ "p3-goldilocks",
+ "p3-keccak-air",
  "p3-matrix",
  "p3-maybe-rayon",
  "p3-util",
  "rand 0.8.5",
  "tracing",
+ "tracing-forest",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -578,6 +585,20 @@ dependencies = [
  "p3-matrix",
  "p3-maybe-rayon",
  "p3-util",
+]
+
+[[package]]
+name = "p3-keccak-air"
+version = "0.3.0"
+source = "git+https://github.com/Plonky3/Plonky3.git?rev=d0c4a36#d0c4a36a0df1b49b9599cca490dc4c0fc26aa43c"
+dependencies = [
+ "p3-air",
+ "p3-field",
+ "p3-matrix",
+ "p3-maybe-rayon",
+ "p3-util",
+ "rand 0.9.1",
+ "tracing",
 ]
 
 [[package]]
@@ -1014,6 +1035,8 @@ dependencies = [
  "p3-field",
  "p3-koala-bear",
  "p3-matrix",
+ "p3-poseidon2",
+ "p3-symmetric",
  "rand 0.9.1",
  "rayon",
  "tracing",
@@ -1336,6 +1359,7 @@ dependencies = [
  "air",
  "criterion",
  "keccak_air",
+ "p3-air",
  "p3-baby-bear",
  "p3-challenger",
  "p3-field",
@@ -1346,6 +1370,7 @@ dependencies = [
  "p3-symmetric",
  "p3-uni-stark",
  "rand 0.9.1",
+ "sumcheck",
  "tracing",
  "tracing-forest",
  "tracing-subscriber",

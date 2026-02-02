@@ -19,7 +19,7 @@ pub struct AirTable<F: Field, EF, A> {
     pub preprocessed_columns: Vec<EvaluationsList<F>>, // TODO 'sparse' preprocessed columns (with non zero values at cylic shifts)
     pub n_constraints: usize,
     pub constraint_degree: usize,
-    pub(crate) univariate_selectors: Vec<WhirDensePolynomial<F>>,
+    pub univariate_selectors: Vec<WhirDensePolynomial<F>>,
 
     _phantom: std::marker::PhantomData<EF>,
 }
