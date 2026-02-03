@@ -1,6 +1,5 @@
-mod helpers;
 use air::{AirSettings, table::AirTable, verify::AirVerifError};
-use helpers::*;
+use air_test_utils::*;
 use p3_air::Air;
 use p3_uni_stark::get_max_constraint_degree_extension;
 use utils::fiat_shamir::{ProverState, VerifierState};

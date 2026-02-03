@@ -27,3 +27,4 @@ p3-koala-bear.workspace = true
 p3-matrix.workspace = true
 rand.workspace = true
 keccak_air.workspace = true
+air-test-utils.workspace = true

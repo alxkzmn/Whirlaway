@@ -1,14 +1,9 @@
 use air::{AirSettings, table::AirTable};
-use p3_field::extension::BinomialExtensionField;
-use p3_koala_bear::KoalaBear;
-use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
-mod helpers;
-use helpers::{
-    MockAir, create_preprocessed_columns, setup_merkle_compress, setup_merkle_hash, MyChallenger,
+use air_test_utils::{
+    F, EF, MockAir, MyChallenger, create_preprocessed_columns, setup_merkle_compress,
+    setup_merkle_hash,
 };
-
-type F = KoalaBear;
-type EF = BinomialExtensionField<F, 8>;
+use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 
 #[test]
 fn test_air_table_new() {
