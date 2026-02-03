@@ -11,6 +11,10 @@ pub use verify::*;
 mod sc_computation;
 pub use sc_computation::*;
 
+// These crates are used in tests even though they appear unused
+use p3_poseidon2 as _;
+use p3_symmetric as _;
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum SumcheckGrinding {
     Custom(usize),

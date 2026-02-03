@@ -119,11 +119,11 @@ where
 {
     let eq_mle = eq_factor.map(|eq_factor| EvaluationsList::eval_eq(&eq_factor[1 + round..]));
 
-    let selectors: Vec<WhirDensePolynomial<F>> = if skips != 1 {
-        univariate_selectors::<F>(skips)
-    } else {
+    let selectors: Vec<WhirDensePolynomial<F>> = if skips == 1 {
         // In the case skips == 1, we do not need to compute the selectors, as they are S_0(x) = 1 - x and S_1(x) = x.
         Vec::new()
+    } else {
+        univariate_selectors::<F>(skips)
     };
 
     let mut p_evals = Vec::<(F, EF)>::new();

@@ -63,8 +63,8 @@ where
     ) -> impl Iterator<Item = EF> {
         let mut folder = ConstraintFolderPacked {
             main: RowMajorMatrixView::new(point, point.len() / 2),
-            alpha_powers: alpha_powers,
-            decomposed_alpha_powers: decomposed_alpha_powers,
+            alpha_powers,
+            decomposed_alpha_powers,
             accumulator: <EF as ExtensionField<F>>::ExtensionPacking::ZERO,
             constraint_index: 0,
         };

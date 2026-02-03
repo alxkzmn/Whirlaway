@@ -6,6 +6,9 @@ pub mod uni_skip_utils;
 pub mod utils;
 pub mod verify;
 
+// This crate is used in tests even though it appears unused
+use p3_poseidon2 as _;
+
 const WHIR_POW_BITS: usize = 16;
 
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
