@@ -9,11 +9,15 @@ mod columns;
 mod constants;
 mod generation;
 mod round_flags;
+mod sponge_air;
+mod sponge_trace;
 
 pub use air::*;
 pub use columns::*;
 pub use constants::*;
 pub use generation::*;
+pub use sponge_air::*;
+pub use sponge_trace::*;
 
 #[cfg(test)]
 mod tests;
@@ -35,9 +39,9 @@ pub const U64_LIMBS: usize = 64 / BITS_PER_LIMB;
 /// Number of rate bits in Keccak-f.
 ///
 /// In Keccak-f[1600], the "rate" parameter for absorbing and squeezing is 1088 bits.
-const RATE_BITS: usize = 1088;
+const PERM_RATE_BITS: usize = 1088;
 
 /// Number of limbs needed to represent the rate portion of the state.
 ///
 /// Computed as rate bits divided by bits per limb.
-const RATE_LIMBS: usize = RATE_BITS / BITS_PER_LIMB;
+const RATE_LIMBS: usize = PERM_RATE_BITS / BITS_PER_LIMB;

@@ -6,10 +6,15 @@ use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
 
 use crate::generate_trace_rows as local_generate;
+use crate::sponge_air::DIGEST_LIMBS;
+use crate::sponge_trace::{
+    digest_from_trace_row, generate_sponge_trace_and_digest_limbs, hash_end_row_for_message_len,
+};
 use crate::{output_limb as local_output_limb, NUM_ROUNDS as LOCAL_NUM_ROUNDS};
 
 // Upstream types
 use p3_keccak_air as upstream;
+use sha3::Digest;
 use upstream::output_limb as upstream_output_limb;
 use upstream::NUM_ROUNDS as UPSTREAM_NUM_ROUNDS;
 
@@ -26,7 +31,7 @@ fn traces_match_for_random_inputs() {
         .map(|_| {
             let mut a = [0u64; 25];
             for i in 0..25 {
-                a[i] = rng.gen();
+                a[i] = rng.random();
             }
             a
         })
@@ -51,4 +56,28 @@ fn traces_match_for_random_inputs() {
             assert_eq!(a, b, "mismatch at perm {}, limb {}", p, i);
         }
     }
+}
+
+#[test]
+fn keccak_sponge_end_to_end_matches_reference_digest() {
+    type F = p3_goldilocks::Goldilocks;
+
+    let msg = b"whirlaway-keccak";
+    let (trace, digest_limbs) = generate_sponge_trace_and_digest_limbs::<F>(msg);
+
+    // Reference digest from sha3::Keccak256.
+    let mut hasher = sha3::Keccak256::new();
+    hasher.update(msg);
+    let digest = hasher.finalize();
+
+    let mut expected_limbs = [0u16; DIGEST_LIMBS];
+    for i in 0..DIGEST_LIMBS {
+        expected_limbs[i] = u16::from_le_bytes([digest[2 * i], digest[2 * i + 1]]);
+    }
+    assert_eq!(digest_limbs, expected_limbs);
+
+    // Also check the output limbs at the hash_end row match the digest limbs.
+    let hash_end_row = hash_end_row_for_message_len(msg.len());
+    let trace_limbs = digest_from_trace_row(&trace, hash_end_row);
+    assert_eq!(trace_limbs, expected_limbs);
 }

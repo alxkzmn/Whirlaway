@@ -1,10 +1,8 @@
 use p3_challenger::DuplexChallenger;
 use p3_field::{
     ExtensionField, PrimeCharacteristicRing, TwoAdicField, extension::BinomialExtensionField,
-    integers::QuotientMap,
 };
 use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
-use p3_poseidon2::Poseidon2;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use sumcheck::{SumcheckGrinding, prove, verify, verify_with_univariate_skip};
 use utils::fiat_shamir::{ProverState, VerifierState};
@@ -109,8 +107,8 @@ fn test_basic_sumcheck_single_round() {
     assert_eq!(eval.point, challenges);
     assert_eq!(eval.value, final_sum);
 
-    let expected_value = multilinear
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
+    let expected_value =
+        multilinear.evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }
 
@@ -119,7 +117,7 @@ fn test_multi_round_sumcheck() {
     let n_vars = 5;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
@@ -153,8 +151,8 @@ fn test_multi_round_sumcheck() {
     assert_eq!(eval.point, challenges);
     assert_eq!(eval.value, final_sum);
 
-    let expected_value = multilinear
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
+    let expected_value =
+        multilinear.evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }
 
@@ -164,7 +162,7 @@ fn test_univariate_skip() {
     let skips = 2;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
@@ -210,7 +208,7 @@ fn test_zerocheck_mode() {
     // Use the zero polynomial so the claimed sum is actually zero.
     let multilinear = create_zero_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
@@ -245,8 +243,8 @@ fn test_zerocheck_mode() {
     assert_eq!(eval.point, challenges);
     assert_eq!(eval.value, final_sum);
 
-    let expected_value = multilinear
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
+    let expected_value =
+        multilinear.evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }
 
@@ -255,7 +253,7 @@ fn test_with_grinding() {
     let n_vars = 3;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
@@ -293,8 +291,8 @@ fn test_with_grinding() {
     assert_eq!(eval.point, challenges);
     assert_eq!(eval.value, final_sum);
 
-    let expected_value = multilinear
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
+    let expected_value =
+        multilinear.evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }
 
@@ -422,7 +420,7 @@ fn test_single_variable() {
     let n_vars = 4;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
@@ -456,8 +454,8 @@ fn test_single_variable() {
     assert_eq!(eval.point, challenges);
     assert_eq!(eval.value, final_sum);
 
-    let expected_value = multilinear
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
+    let expected_value =
+        multilinear.evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }
 
@@ -466,7 +464,7 @@ fn test_higher_degree() {
     let n_vars = 3;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
@@ -501,7 +499,7 @@ fn test_higher_degree() {
     assert_eq!(eval.point, challenges);
     assert_eq!(eval.value, final_sum);
 
-    let expected_value = multilinear
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
+    let expected_value =
+        multilinear.evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }

@@ -92,19 +92,16 @@ fn test_sumcheck_with_pcs_commitment_flow() {
 
     // Verify sumcheck
     let challenger2 = setup_challenger();
-    let mut verifier_state = VerifierState::new(
-        &domainsep,
-        prover_state.proof_data().to_vec(),
-        challenger2,
-    );
+    let mut verifier_state =
+        VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger2);
     let (verified_sum, eval) =
         verify::<F, EF, MyChallenger>(&mut verifier_state, n_vars, 1, SumcheckGrinding::None)
             .unwrap();
 
     assert_eq!(verified_sum, expected_sum);
     assert_eq!(eval.value, final_sum);
-    let expected_value = multilinear
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
+    let expected_value =
+        multilinear.evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }
 
@@ -135,24 +132,17 @@ fn test_sumcheck_complex_multi_round() {
     );
 
     let challenger2 = setup_challenger();
-    let mut verifier_state = VerifierState::new(
-        &domainsep,
-        prover_state.proof_data().to_vec(),
-        challenger2,
-    );
+    let mut verifier_state =
+        VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger2);
     let (verified_sum, eval) =
         verify::<F, EF, MyChallenger>(&mut verifier_state, n_vars, 1, SumcheckGrinding::None)
             .unwrap();
     assert_eq!(verified_sum, expected_sum);
     assert_eq!(eval.value, final_sum);
-    let expected_value = multilinear
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
+    let expected_value =
+        multilinear.evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }
-
-// Note: BabyBear test skipped due to API differences - focus on KoalaBear tests
-// #[test]
-// fn test_sumcheck_different_extension_fields() { ... }
 
 #[test]
 #[ignore = "Univariate skip path triggers UB in current whir-p3"]
@@ -167,7 +157,7 @@ fn test_sumcheck_with_univariate_skip() {
 
     let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
-    let (_challenges, _folded, final_sum) = prove(
+    let (_challenges, _folded, _final_sum) = prove(
         skips,
         &[&multilinear],
         &SimpleSumComputation,
@@ -183,12 +173,9 @@ fn test_sumcheck_with_univariate_skip() {
     );
 
     let challenger2 = setup_challenger();
-    let mut verifier_state = VerifierState::new(
-        &domainsep,
-        prover_state.proof_data().to_vec(),
-        challenger2,
-    );
-    let (verified_sum, _eval) = verify_with_univariate_skip(
+    let mut verifier_state =
+        VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger2);
+    let (_verified_sum, _eval) = verify_with_univariate_skip(
         &mut verifier_state,
         1,
         n_vars,
@@ -225,11 +212,8 @@ fn test_sumcheck_with_grinding() {
     );
 
     let challenger2 = setup_challenger();
-    let mut verifier_state = VerifierState::new(
-        &domainsep,
-        prover_state.proof_data().to_vec(),
-        challenger2,
-    );
+    let mut verifier_state =
+        VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger2);
     let (verified_sum, eval) = verify::<F, EF, MyChallenger>(
         &mut verifier_state,
         n_vars,
@@ -239,8 +223,8 @@ fn test_sumcheck_with_grinding() {
     .unwrap();
     assert_eq!(verified_sum, expected_sum);
     assert_eq!(eval.value, final_sum);
-    let expected_value = multilinear
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
+    let expected_value =
+        multilinear.evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }
 
@@ -283,11 +267,8 @@ fn test_sumcheck_multiple_multilinears() {
     );
 
     let challenger2 = setup_challenger();
-    let mut verifier_state = VerifierState::new(
-        &domainsep,
-        prover_state.proof_data().to_vec(),
-        challenger2,
-    );
+    let mut verifier_state =
+        VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger2);
     let (verified_sum, eval) =
         verify::<F, EF, MyChallenger>(&mut verifier_state, n_vars, 1, SumcheckGrinding::None)
             .unwrap();
