@@ -7,11 +7,10 @@ use rayon::prelude::*;
 use tracing::instrument;
 use utils::{
     batch_fold_multilinear_in_large_field, batch_fold_multilinear_in_small_field,
-    univariate_selectors,
+    univariate_selectors, DensePolynomial, ProverState,
 };
 use whir_p3::{
-    fiat_shamir::prover::ProverState,
-    poly::{dense::WhirDensePolynomial, evals::EvaluationsList},
+    poly::evals::EvaluationsList,
 };
 
 use crate::{SumcheckComputation, SumcheckComputationPacked, SumcheckGrinding};
@@ -117,13 +116,28 @@ where
     SC: SumcheckComputation<F, NF, EF> + SumcheckComputationPacked<F, EF>,
     Challenger: FieldChallenger<F> + GrindingChallenger<Witness = F>,
 {
-    let eq_mle = eq_factor.map(|eq_factor| EvaluationsList::eval_eq(&eq_factor[1 + round..]));
+    let eq_mle = eq_factor.map(|eq_factor| {
+        EvaluationsList::new_from_point(&eq_factor[1 + round..], EF::ONE)
+    });
 
-    let selectors: Vec<WhirDensePolynomial<F>> = if skips == 1 {
+    let selectors: Vec<DensePolynomial<F>> = if skips == 1 {
         // In the case skips == 1, we do not need to compute the selectors, as they are S_0(x) = 1 - x and S_1(x) = x.
         Vec::new()
     } else {
         univariate_selectors::<F>(skips)
+    };
+
+    let selectors_ef: Vec<DensePolynomial<EF>> = if skips == 1 {
+        Vec::new()
+    } else {
+        selectors
+            .iter()
+            .map(|s| {
+                DensePolynomial::from_coefficients_vec(
+                    s.coeffs.iter().copied().map(EF::from).collect(),
+                )
+            })
+            .collect()
     };
 
     let mut p_evals = Vec::<(F, EF)>::new();
@@ -143,9 +157,11 @@ where
                 } else {
                     (*sum
                         - (0..(1 << skips) - 1)
-                            .map(|i| p_evals[i].1 * selectors[i].evaluate(eq_factor[round]))
+                            .map(|i| {
+                                p_evals[i].1 * selectors_ef[i].evaluate(eq_factor[round])
+                            })
                             .sum::<EF>())
-                        / selectors[(1 << skips) - 1].evaluate(eq_factor[round])
+                        / selectors_ef[(1 << skips) - 1].evaluate(eq_factor[round])
                 }
             } else {
                 *sum - p_evals.iter().map(|(_, s)| *s).sum::<EF>()
@@ -156,7 +172,7 @@ where
                 multilinears
                     .par_iter()
                     .map(|poly| {
-                        let evals = poly.evals();
+                        let evals = poly.as_slice();
                         let (first_half, _) = evals.split_at(evals.len() / 2);
                         EvaluationsList::new(first_half.to_vec())
                     })
@@ -187,7 +203,7 @@ where
         p_evals.push((F::from_usize(z), sum_z));
     }
 
-    let mut p = WhirDensePolynomial::lagrange_interpolation(&p_evals).unwrap();
+    let mut p = DensePolynomial::lagrange_interpolation(&p_evals).unwrap();
 
     if let Some(eq_factor) = &eq_factor {
         // https://eprint.iacr.org/2024/108.pdf Section 3.2
@@ -197,16 +213,17 @@ where
             // This polynomial `q` interpolates the points (0, 1 - r_j) and (1, r_j).
             let a = EF::ONE - eq_factor[round];
             let b = EF::from_usize(2) * eq_factor[round] - EF::ONE;
-            let selector_poly = WhirDensePolynomial::from_coefficients_vec(vec![a, b]);
-            p *= &selector_poly;
+            let selector_poly = DensePolynomial::from_coefficients_vec(vec![a, b]);
+            p.mul_assign(&selector_poly);
         } else {
-            p *= &WhirDensePolynomial::lagrange_interpolation(
+            let selector_poly = DensePolynomial::lagrange_interpolation(
                 &(0..1 << skips)
                     .into_par_iter()
-                    .map(|i| (F::from_usize(i), selectors[i].evaluate(eq_factor[round])))
+                    .map(|i| (EF::from_usize(i), selectors_ef[i].evaluate(eq_factor[round])))
                     .collect::<Vec<_>>(),
             )
             .unwrap();
+            p.mul_assign(&selector_poly);
         }
     }
 
@@ -232,7 +249,7 @@ where
                     + eq_factor[round] * challenge)
                     * missing_mul_factor.unwrap_or(EF::ONE)
             } else {
-                selectors
+                selectors_ef
                     .iter()
                     .map(|s| s.evaluate(eq_factor[round]) * s.evaluate(challenge))
                     .sum::<EF>()
@@ -244,7 +261,7 @@ where
     let folding_scalars = if skips == 1 {
         vec![EF::ONE - challenge, challenge]
     } else {
-        selectors
+        selectors_ef
             .iter()
             .map(|s| s.evaluate(challenge))
             .collect::<Vec<_>>()
@@ -274,7 +291,7 @@ where
         let pols: &[EvaluationsList<F>] = unsafe { std::mem::transmute(pols) };
         let packed_pols = pols
             .iter()
-            .map(|p| F::Packing::pack_slice(p.evals()))
+            .map(|p| F::Packing::pack_slice(p.as_slice()))
             .collect::<Vec<_>>();
 
         let decomposed_batching_scalars: Vec<_> = (0..<EF as BasedVectorSpace<F>>::DIMENSION)
@@ -296,7 +313,7 @@ where
                 if let Some(eq_mle) = eq_mle {
                     res.enumerate()
                         .map(|(idx_in_packing, res)| {
-                            res * eq_mle.evals()[i * F::Packing::WIDTH + idx_in_packing]
+                            res * eq_mle.as_slice()[i * F::Packing::WIDTH + idx_in_packing]
                         })
                         .sum()
                 } else {
@@ -310,8 +327,8 @@ where
         (0..1 << n_vars)
             .into_par_iter()
             .map(|x| {
-                let point = pols.iter().map(|pol| pol.evals()[x]).collect::<Vec<_>>();
-                let eq_mle_eval = eq_mle.map(|p| p.evals()[x]);
+                let point = pols.iter().map(|pol| pol.as_slice()[x]).collect::<Vec<_>>();
+                let eq_mle_eval = eq_mle.map(|p| p.as_slice()[x]);
                 eval_sumcheck_computation(computation, batching_scalars, &point, eq_mle_eval)
             })
             .sum()

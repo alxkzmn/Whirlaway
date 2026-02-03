@@ -9,13 +9,13 @@ use crate::generate_trace_rows as local_generate;
 use crate::{output_limb as local_output_limb, NUM_ROUNDS as LOCAL_NUM_ROUNDS};
 
 // Upstream types
-use p3k_keccak_air as upstream;
+use p3_keccak_air as upstream;
 use upstream::output_limb as upstream_output_limb;
 use upstream::NUM_ROUNDS as UPSTREAM_NUM_ROUNDS;
 
 #[test]
 fn traces_match_for_random_inputs() {
-    type F = p3k_goldilocks::Goldilocks;
+    type F = p3_goldilocks::Goldilocks;
 
     let mut rng = SmallRng::seed_from_u64(1);
 

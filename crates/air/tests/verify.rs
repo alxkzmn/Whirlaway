@@ -2,17 +2,20 @@ mod helpers;
 use air::{AirSettings, table::AirTable, verify::AirVerifError};
 use helpers::*;
 use p3_air::Air;
+use p3_field::PrimeCharacteristicRing;
+use p3_uni_stark::get_max_constraint_degree_extension;
 use utils::{ConstraintFolder, ConstraintFolderPacked};
+use utils::fiat_shamir::{ProverState, VerifierState};
 use whir_p3::{
-    fiat_shamir::{domain_separator::DomainSeparator, verifier::VerifierState},
-    whir::parameters::WhirConfig,
+    fiat_shamir::domain_separator::DomainSeparator,
+    whir::{parameters::WhirConfig, proof::WhirProof},
 };
 
 fn prove_and_get_proof_data<A>(
     table: &AirTable<F, EF, A>,
     settings: &AirSettings,
     witness: Vec<whir_p3::poly::evals::EvaluationsList<F>>,
-) -> Vec<F>
+) -> (Vec<EF>, WhirProof<F, EF, F, 8>)
 where
     A: for<'a> Air<ConstraintFolder<'a, F, F, EF>>
         + for<'a> Air<ConstraintFolder<'a, F, EF, EF>>
@@ -29,9 +32,9 @@ where
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut prover_state = domainsep.to_prover_state(challenger.clone());
+    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
 
-    table.prove(
+    let whir_proof = table.prove(
         settings,
         merkle_hash,
         merkle_compress,
@@ -39,16 +42,18 @@ where
         witness,
     );
 
-    prover_state.proof_data().to_vec()
+    (prover_state.proof_data().to_vec(), whir_proof)
 }
 
 #[test]
 fn test_air_verify_basic() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 4);
+    let constraint_degree =
+        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
-    let proof_data = prove_and_get_proof_data(&table, &settings, witness);
+    let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
 
     let merkle_hash = setup_merkle_hash();
     let merkle_compress = setup_merkle_compress();
@@ -61,7 +66,7 @@ fn test_air_verify_basic() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut verifier_state = domainsep.to_verifier_state(proof_data, challenger);
+    let mut verifier_state = VerifierState::new(&domainsep, proof_data, challenger);
 
     let result = table.verify(
         &settings,
@@ -69,6 +74,7 @@ fn test_air_verify_basic() {
         merkle_compress,
         &mut verifier_state,
         log_length,
+        &whir_proof,
     );
 
     result.unwrap();
@@ -79,11 +85,12 @@ fn test_air_verify_with_preprocessed() {
     let (air, log_length, mut all_cols) = create_keccak_witness_columns(1, 0);
     let preprocessed = all_cols.drain(..2).collect::<Vec<_>>();
     let witness = all_cols;
-
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, 4);
+    let constraint_degree =
+        get_max_constraint_degree_extension::<F, EF, _>(&air, preprocessed.len(), 0, 0, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, constraint_degree);
 
     let settings = create_test_settings();
-    let proof_data = prove_and_get_proof_data(&table, &settings, witness);
+    let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
 
     let merkle_hash = setup_merkle_hash();
     let merkle_compress = setup_merkle_compress();
@@ -96,7 +103,7 @@ fn test_air_verify_with_preprocessed() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut verifier_state = domainsep.to_verifier_state(proof_data, challenger);
+    let mut verifier_state = VerifierState::new(&domainsep, proof_data, challenger);
 
     let result = table.verify(
         &settings,
@@ -104,6 +111,7 @@ fn test_air_verify_with_preprocessed() {
         merkle_compress,
         &mut verifier_state,
         log_length,
+        &whir_proof,
     );
 
     result.unwrap();
@@ -111,12 +119,14 @@ fn test_air_verify_with_preprocessed() {
 
 #[test]
 fn test_air_verify_invalid_proof() {
-    let log_length = 3;
-    let air = MockAir::new(4);
-
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 1);
+    let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
+    let constraint_degree =
+        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
+    let (_proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
+
     let merkle_hash = setup_merkle_hash();
     let merkle_compress = setup_merkle_compress();
 
@@ -129,7 +139,7 @@ fn test_air_verify_invalid_proof() {
 
     let challenger = setup_challenger();
     // Use empty/invalid proof data
-    let mut verifier_state = domainsep.to_verifier_state(vec![], challenger);
+    let mut verifier_state = VerifierState::new(&domainsep, vec![], challenger);
 
     let result = table.verify(
         &settings,
@@ -137,13 +147,13 @@ fn test_air_verify_invalid_proof() {
         merkle_compress,
         &mut verifier_state,
         log_length,
+        &whir_proof,
     );
 
     // Should fail with invalid proof
     assert!(result.is_err());
     match result.unwrap_err() {
-        AirVerifError::InvalidPcsCommitment | AirVerifError::Fs(_) | AirVerifError::Sumcheck(_) => {
-        }
+        AirVerifError::Fs(_) | AirVerifError::Sumcheck(_) => {}
         _ => panic!("Unexpected error type"),
     }
 }
@@ -152,15 +162,15 @@ fn test_air_verify_invalid_proof() {
 fn test_air_verify_corrupted_proof() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
 
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 4);
+    let constraint_degree =
+        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
-    let mut proof_data = prove_and_get_proof_data(&table, &settings, witness);
+    let (mut proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
 
-    // Corrupt the proof data
-    if !proof_data.is_empty() {
-        proof_data[0] = F::new(0);
-    }
+    // Corrupt the proof data by truncating it
+    proof_data.pop();
 
     let merkle_hash = setup_merkle_hash();
     let merkle_compress = setup_merkle_compress();
@@ -173,7 +183,7 @@ fn test_air_verify_corrupted_proof() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut verifier_state = domainsep.to_verifier_state(proof_data, challenger);
+    let mut verifier_state = VerifierState::new(&domainsep, proof_data, challenger);
 
     let result = table.verify(
         &settings,
@@ -181,6 +191,7 @@ fn test_air_verify_corrupted_proof() {
         merkle_compress,
         &mut verifier_state,
         log_length,
+        &whir_proof,
     );
 
     // Should fail verification
@@ -190,10 +201,12 @@ fn test_air_verify_corrupted_proof() {
 #[test]
 fn test_air_verify_different_settings() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 4);
+    let constraint_degree =
+        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
-    let proof_data = prove_and_get_proof_data(&table, &settings, witness);
+    let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
 
     let merkle_hash = setup_merkle_hash();
     let merkle_compress = setup_merkle_compress();
@@ -206,7 +219,7 @@ fn test_air_verify_different_settings() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut verifier_state = domainsep.to_verifier_state(proof_data, challenger);
+    let mut verifier_state = VerifierState::new(&domainsep, proof_data, challenger);
 
     // Verify with same settings
     let result = table.verify(
@@ -215,6 +228,7 @@ fn test_air_verify_different_settings() {
         merkle_compress,
         &mut verifier_state,
         log_length,
+        &whir_proof,
     );
 
     result.unwrap();
@@ -224,10 +238,12 @@ fn test_air_verify_different_settings() {
 fn test_air_verify_larger_table() {
     let (air, log_length, witness) = create_keccak_witness_columns(2, 0);
     // Keep univariate_skips=1; skips>1 currently triggers UB in whir-p3.
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 4);
+    let constraint_degree =
+        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
-    let proof_data = prove_and_get_proof_data(&table, &settings, witness);
+    let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
 
     let merkle_hash = setup_merkle_hash();
     let merkle_compress = setup_merkle_compress();
@@ -240,7 +256,7 @@ fn test_air_verify_larger_table() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut verifier_state = domainsep.to_verifier_state(proof_data, challenger);
+    let mut verifier_state = VerifierState::new(&domainsep, proof_data, challenger);
 
     let result = table.verify(
         &settings,
@@ -248,6 +264,7 @@ fn test_air_verify_larger_table() {
         merkle_compress,
         &mut verifier_state,
         log_length,
+        &whir_proof,
     );
 
     result.unwrap();
@@ -257,10 +274,12 @@ fn test_air_verify_larger_table() {
 fn test_air_verify_wrong_log_length() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
 
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 4);
+    let constraint_degree =
+        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
-    let proof_data = prove_and_get_proof_data(&table, &settings, witness);
+    let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
 
     let merkle_hash = setup_merkle_hash();
     let merkle_compress = setup_merkle_compress();
@@ -273,7 +292,7 @@ fn test_air_verify_wrong_log_length() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut verifier_state = domainsep.to_verifier_state(proof_data, challenger);
+    let mut verifier_state = VerifierState::new(&domainsep, proof_data, challenger);
 
     // Verify with wrong log_length
     let result = table.verify(
@@ -282,6 +301,7 @@ fn test_air_verify_wrong_log_length() {
         merkle_compress,
         &mut verifier_state,
         log_length + 1, // Wrong length
+        &whir_proof,
     );
 
     // Should fail

@@ -13,6 +13,7 @@ use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing_forest::ForestLayer;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
+use utils::{ProverState, VerifierState};
 use whir_p3::{
     fiat_shamir::domain_separator::DomainSeparator, parameters::FoldingFactor,
     whir::parameters::WhirConfig,
@@ -160,9 +161,9 @@ pub fn prove_poseidon2(
 
     let challenger = MyChallenger::new(poseidon16);
 
-    let mut prover_state = domainsep.to_prover_state(challenger.clone());
+    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
 
-    table.prove(
+    let whir_proof = table.prove(
         &settings,
         merkle_hash.clone(),
         merkle_compress.clone(),
@@ -179,7 +180,7 @@ pub fn prove_poseidon2(
     if verify_enabled {
         let time = Instant::now();
         let mut verifier_state =
-            domainsep.to_verifier_state(prover_state.proof_data().to_vec(), challenger);
+            VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger);
         table
             .verify(
                 &settings,
@@ -187,6 +188,7 @@ pub fn prove_poseidon2(
                 merkle_compress,
                 &mut verifier_state,
                 log_n_rows,
+                &whir_proof,
             )
             .unwrap();
         verifier_time = time.elapsed();

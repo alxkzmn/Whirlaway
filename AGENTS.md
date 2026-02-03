@@ -64,6 +64,27 @@ Common mistakes and fixes:
 - **Witness evaluation method**:
   - Evaluate via `packed_witness.polynomial.evaluate(...)` (not `packed_witness.evaluate(...)`).
 
+### AIR sumcheck folding uses **suffix variables**
+
+- When folding a multilinear over the outer sumcheck point, `EvaluationsList::fold` substitutes the **last** variables.
+- The batched-witness check in verification folds the **suffix** of the point (i.e., `outer_sumcheck_challenge.point[1..]`).
+- If you need sub-evaluations for that check, fold the **suffix** explicitly (see the `fold_suffix` helper in the AIR prover) rather than using `fold` with a full point in the wrong order.
+
+### Zerocheck eq factor vs sumcheck challenges
+
+- The zerocheck eq factor (`zerocheck_challenges`) is distinct from the outer sumcheck challenge point returned by the prover.
+- Don’t overwrite or reuse the eq factor vector with sumcheck challenges, or the verifier’s checks will fail.
+
+### Keccak trace input layout matters
+
+- `keccak_air::generate_trace_rows` expects inputs in standard Keccak indexing `input[x + 5*y]` and **transposes** to `[x][y]` state.
+- If you bypass the helper or construct traces manually, ensure the same transpose, or trace-vs-upstream comparisons will fail.
+
+### Negative proof tests must still be well-formed
+
+- `whir-p3`’s commitment reader assumes a populated proof structure.
+- For “invalid proof” tests, use a real `WhirProof` and **truncate/corrupt proof data**, rather than constructing a default proof with empty commitments.
+
 ### Borrow/move gotchas in loops
 
 - Hash/compress function handles (e.g. `merkle_hash`, `merkle_compress`) may be **moved** when passed into prove/verify routines inside loops; clone them per iteration if needed.

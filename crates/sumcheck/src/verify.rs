@@ -1,10 +1,6 @@
 use p3_challenger::{FieldChallenger, GrindingChallenger};
 use p3_field::{ExtensionField, TwoAdicField};
-use utils::Evaluation;
-use whir_p3::{
-    fiat_shamir::{errors::ProofError, verifier::VerifierState},
-    poly::dense::WhirDensePolynomial,
-};
+use utils::{DensePolynomial, Evaluation, ProofError, VerifierState};
 
 use crate::SumcheckGrinding;
 
@@ -86,7 +82,7 @@ where
 
     for (&deg, sumation_set) in max_degree_per_vars.iter().zip(sumation_sets) {
         let coeffs = verifier_state.next_extension_scalars_vec(deg + 1)?;
-        let pol = WhirDensePolynomial::from_coefficients_vec(coeffs);
+        let pol = DensePolynomial::from_coefficients_vec(coeffs);
 
         let computed_sum = sumation_set.iter().map(|&s| pol.evaluate(s)).sum();
         if first_round {

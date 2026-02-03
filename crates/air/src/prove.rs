@@ -1,10 +1,10 @@
 use p3_air::Air;
-use p3_challenger::{FieldChallenger, GrindingChallenger};
+use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger};
 use p3_field::{
     BasedVectorSpace, ExtensionField, Field, Packable, TwoAdicField, cyclic_subgroup_known_order,
 };
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
-use p3_util::log2_strict_usize;
+use p3_dft::Radix2Bowers;
 use serde::{Deserialize, Serialize};
 use sumcheck::{SumcheckComputation, SumcheckComputationPacked, SumcheckGrinding};
 use tracing::{Level, info_span, instrument, span};
@@ -12,16 +12,18 @@ use utils::{
     ConstraintFolder, ConstraintFolderPacked, add_multilinears, multilinears_linear_combination,
     packed_multilinear,
 };
+use utils::fiat_shamir::ProverState;
 use whir_p3::{
-    dft::EvalsDft,
-    fiat_shamir::prover::ProverState,
     poly::{evals::EvaluationsList, multilinear::MultilinearPoint},
     whir::{
         committer::writer::CommitmentWriter,
+        parameters::InitialPhaseConfig,
         prover::Prover,
-        statement::{Statement, weights::Weights},
+        proof::WhirProof,
+        constraints::statement::EqStatement,
     },
 };
+use whir_p3::parameters::ProtocolParameters;
 
 use crate::{
     AirSettings,
@@ -37,32 +39,60 @@ cf https://eprint.iacr.org/2023/552.pdf and https://solvable.group/posts/super-a
 
 */
 
+fn scale_evals<F: Field>(evals: &EvaluationsList<F>, alpha: F) -> EvaluationsList<F> {
+    EvaluationsList::new(evals.as_slice().iter().map(|&v| v * alpha).collect())
+}
+
+fn fold_suffix<F: Field, EF: ExtensionField<F>>(
+    evals: &EvaluationsList<F>,
+    suffix_point: &[EF],
+) -> EvaluationsList<EF> {
+    let eq = EvaluationsList::new_from_point(suffix_point, EF::ONE);
+    let block_size = eq.num_evals();
+    let num_blocks = evals.num_evals() / block_size;
+    let mut folded = Vec::with_capacity(num_blocks);
+
+    for block in 0..num_blocks {
+        let start = block * block_size;
+        let value = evals.as_slice()[start..start + block_size]
+            .iter()
+            .zip(eq.as_slice())
+            .map(|(&a, &b)| b * EF::from(a))
+            .sum();
+        folded.push(value);
+    }
+
+    EvaluationsList::new(folded)
+}
+
 impl<F, EF, A> AirTable<F, EF, A>
 where
-    F: TwoAdicField,
+    F: TwoAdicField + Ord,
     EF: ExtensionField<F> + TwoAdicField,
     A: for<'a> Air<ConstraintFolder<'a, F, F, EF>>
         + for<'a> Air<ConstraintFolder<'a, F, EF, EF>>
         + for<'a> Air<ConstraintFolderPacked<'a, F, EF>>,
 {
     #[instrument(name = "air: prove", skip_all)]
-    pub fn prove<H, C, Challenger, const DIGEST_ELEMS: usize>(
+    pub fn prove<H, C, Challenger, W, const DIGEST_ELEMS: usize>(
         &self,
         settings: &AirSettings,
         merkle_hash: H,
         merkle_compress: C,
         prover_state: &mut ProverState<F, EF, Challenger>,
         witness: Vec<EvaluationsList<F>>,
-    ) where
-        Challenger: FieldChallenger<F> + GrindingChallenger<Witness = F>,
-        H: CryptographicHasher<F, [F; DIGEST_ELEMS]>
-            + CryptographicHasher<F::Packing, [F::Packing; DIGEST_ELEMS]>
-            + Sync,
-        C: PseudoCompressionFunction<[F; DIGEST_ELEMS], 2>
-            + PseudoCompressionFunction<[F::Packing; DIGEST_ELEMS], 2>
-            + Sync,
-        [F; DIGEST_ELEMS]: Serialize + for<'de> Deserialize<'de>,
-        F: Eq + Packable,
+    ) -> WhirProof<F, EF, W, DIGEST_ELEMS>
+    where
+        Challenger: FieldChallenger<F>
+            + GrindingChallenger<Witness = F>
+            + CanObserve<p3_symmetric::Hash<F, W, DIGEST_ELEMS>>,
+        H: CryptographicHasher<F, [W; DIGEST_ELEMS]> + Sync + Clone,
+        C: PseudoCompressionFunction<[W; DIGEST_ELEMS], 2> + Sync + Clone,
+        W: p3_field::PackedValue<Value = W> + Eq + Send + Sync + Default,
+        [W; DIGEST_ELEMS]: Serialize + for<'de> Deserialize<'de>,
+        F: Eq + Packable + Default,
+        EF: Default,
+        F::Packing: Eq + Send + Sync,
     {
         assert!(
             settings.univariate_skips < self.log_length,
@@ -81,14 +111,32 @@ where
 
         let committer = CommitmentWriter::new(&whir_params);
 
-        let ext_dim = <EF as BasedVectorSpace<F>>::DIMENSION;
-        assert!(ext_dim.is_power_of_two());
-        let dft = EvalsDft::new(
-            1 << (self.log_n_witness_columns() + self.log_length + settings.whir_log_inv_rate
-                - log2_strict_usize(ext_dim)),
-        );
+        let _ext_dim = <EF as BasedVectorSpace<F>>::DIMENSION;
+        let dft = Radix2Bowers;
 
-        let packed_witness = committer.commit(&dft, prover_state, packed_pol).unwrap();
+        let proof_params = ProtocolParameters {
+            initial_phase_config: InitialPhaseConfig::WithStatementClassic,
+            security_level: settings.security_bits,
+            pow_bits: crate::WHIR_POW_BITS,
+            folding_factor: settings.whir_folding_factor,
+            merkle_hash: whir_params.merkle_hash.clone(),
+            merkle_compress: whir_params.merkle_compress.clone(),
+            soundness_type: settings.whir_soudness_type,
+            starting_log_inv_rate: settings.whir_log_inv_rate,
+            rs_domain_initial_reduction_factor: settings.whir_initial_domain_reduction_factor,
+        };
+        let mut whir_proof = WhirProof::<F, EF, W, DIGEST_ELEMS>::from_protocol_parameters(
+            &proof_params,
+            whir_params.num_variables,
+        );
+        let packed_witness = committer
+            .commit::<_, F, W, W, DIGEST_ELEMS>(
+                &dft,
+                &mut whir_proof,
+                prover_state.challenger_mut(),
+                packed_pol,
+            )
+            .unwrap();
 
         self.constraints_batching_pow(prover_state, settings)
             .unwrap();
@@ -111,7 +159,7 @@ where
             .iter()
             .chain(&witness)
             .collect::<Vec<_>>();
-        let (zerocheck_challenges, all_inner_sums, _) = info_span!("zerocheck").in_scope(|| {
+        let (outer_sumcheck_challenges, all_inner_sums, _) = info_span!("zerocheck").in_scope(|| {
             sumcheck::prove(
                 settings.univariate_skips,
                 &columns_up_and_down(&preprocessed_and_witness),
@@ -134,11 +182,15 @@ where
 
         let inner_sums_up = all_inner_sums[self.n_preprocessed_columns()..self.n_columns]
             .iter()
-            .map(|s| s.evaluate::<EF>(&MultilinearPoint(vec![])))
+            .map(|s| s.as_constant().unwrap_or_else(|| {
+                s.evaluate_hypercube_ext::<F>(&MultilinearPoint::new(vec![]))
+            }))
             .collect::<Vec<_>>();
         let inner_sums_down = all_inner_sums[self.n_columns + self.n_preprocessed_columns()..]
             .iter()
-            .map(|s| s.evaluate::<EF>(&MultilinearPoint(vec![])))
+            .map(|s| s.as_constant().unwrap_or_else(|| {
+                s.evaluate_hypercube_ext::<F>(&MultilinearPoint::new(vec![]))
+            }))
             .collect::<Vec<_>>();
 
         prover_state.add_extension_scalars(&inner_sums_up);
@@ -156,39 +208,41 @@ where
 
         let batched_column = multilinears_linear_combination(
             &witness,
-            &EvaluationsList::eval_eq(&columns_batching_scalars).evals()[..witness.len()],
+            &EvaluationsList::new_from_point(&columns_batching_scalars, EF::ONE).as_slice()
+                [..witness.len()],
         );
 
         let alpha = prover_state.sample();
 
         let batched_column_mixed = add_multilinears(
             &column_up(&batched_column),
-            &column_down(&batched_column).scale(alpha),
+            &scale_evals(&column_down(&batched_column), alpha),
         );
 
         // TODO opti
-        let sub_evals =
-            &batched_column_mixed.fold(&MultilinearPoint(zerocheck_challenges[1..].to_vec()));
+        let sub_evals = fold_suffix(&batched_column_mixed, &outer_sumcheck_challenges[1..]);
 
-        prover_state.add_extension_scalars(sub_evals);
+        prover_state.add_extension_scalars(sub_evals.as_slice());
 
         let mut epsilons = vec![EF::ZERO; settings.univariate_skips];
         for challenge in &mut epsilons {
             *challenge = prover_state.sample();
         }
 
-        let point = [epsilons.clone(), zerocheck_challenges[1..].to_vec()].concat();
+        let point = [epsilons.clone(), outer_sumcheck_challenges[1..].to_vec()].concat();
         let mles_for_inner_sumcheck = vec![
             add_multilinears(
                 &matrix_up_folded(&point),
-                &matrix_down_folded(&point).scale(alpha),
+                &scale_evals(&matrix_down_folded(&point), alpha),
             ),
             batched_column,
         ];
 
         // TODO do not recompute
-        let inner_sum = info_span!("inner sum evaluation")
-            .in_scope(|| batched_column_mixed.evaluate(&MultilinearPoint(point.clone())));
+        let inner_sum = info_span!("inner sum evaluation").in_scope(|| {
+            batched_column_mixed
+                .evaluate_hypercube_ext::<F>(&MultilinearPoint::new(point.clone()))
+        });
 
         let (inner_challenges, inner_evals, _) = sumcheck::prove(
             1,
@@ -209,20 +263,27 @@ where
 
         let final_point = [columns_batching_scalars.clone(), inner_challenges].concat();
 
-        let packed_value = inner_evals[1].evaluate(&MultilinearPoint(vec![]));
+        let packed_value = inner_evals[1]
+            .as_constant()
+            .unwrap_or_else(|| inner_evals[1].evaluate_hypercube_ext::<F>(&MultilinearPoint::new(vec![])));
 
         std::mem::drop(_span);
 
         let prover = Prover(&whir_params);
 
-        let mut statement = Statement::new(final_point.len());
-        statement.add_constraint(
-            Weights::evaluation(MultilinearPoint(final_point)),
-            packed_value,
-        );
+        let mut statement = EqStatement::initialize(final_point.len());
+        statement.add_evaluated_constraint(MultilinearPoint::new(final_point), packed_value);
         prover
-            .prove(&dft, prover_state, statement, packed_witness)
+            .prove::<_, F, W, W, DIGEST_ELEMS>(
+                &dft,
+                &mut whir_proof,
+                prover_state.challenger_mut(),
+                statement,
+                packed_witness,
+            )
             .unwrap();
+
+        whir_proof
     }
 }
 
