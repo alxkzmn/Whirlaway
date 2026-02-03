@@ -2,10 +2,9 @@ mod helpers;
 use air::{AirSettings, table::AirTable, verify::AirVerifError};
 use helpers::*;
 use p3_air::Air;
-use p3_field::PrimeCharacteristicRing;
 use p3_uni_stark::get_max_constraint_degree_extension;
-use utils::{ConstraintFolder, ConstraintFolderPacked};
 use utils::fiat_shamir::{ProverState, VerifierState};
+use utils::{ConstraintFolder, ConstraintFolderPacked};
 use whir_p3::{
     fiat_shamir::domain_separator::DomainSeparator,
     whir::{parameters::WhirConfig, proof::WhirProof},
@@ -48,8 +47,7 @@ where
 #[test]
 fn test_air_verify_basic() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
-    let constraint_degree =
-        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
     let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
@@ -120,8 +118,7 @@ fn test_air_verify_with_preprocessed() {
 #[test]
 fn test_air_verify_invalid_proof() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
-    let constraint_degree =
-        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
     let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
@@ -162,8 +159,7 @@ fn test_air_verify_invalid_proof() {
 fn test_air_verify_corrupted_proof() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
 
-    let constraint_degree =
-        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
     let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
@@ -201,8 +197,7 @@ fn test_air_verify_corrupted_proof() {
 #[test]
 fn test_air_verify_different_settings() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
-    let constraint_degree =
-        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
     let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
@@ -238,8 +233,7 @@ fn test_air_verify_different_settings() {
 fn test_air_verify_larger_table() {
     let (air, log_length, witness) = create_keccak_witness_columns(2, 0);
     // Keep univariate_skips=1; skips>1 currently triggers UB in whir-p3.
-    let constraint_degree =
-        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
     let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
@@ -274,8 +268,7 @@ fn test_air_verify_larger_table() {
 fn test_air_verify_wrong_log_length() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
 
-    let constraint_degree =
-        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
     let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();

@@ -7,8 +7,6 @@ use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
 use p3_matrix::Matrix;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use rand::{Rng, SeedableRng, rngs::StdRng};
-use utils::fiat_shamir::ProverState;
-use whir_p3::fiat_shamir::domain_separator::DomainSeparator;
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 use whir_p3::poly::evals::EvaluationsList;
 
@@ -60,11 +58,6 @@ pub fn setup_challenger() -> MyChallenger {
     let mut rng = StdRng::seed_from_u64(42);
     let poseidon = Poseidon16::new_from_rng_128(&mut rng);
     DuplexChallenger::new(poseidon)
-}
-
-pub fn setup_prover_state() -> ProverState<F, EF, MyChallenger> {
-    let domain_separator = DomainSeparator::new(vec![]);
-    ProverState::new(&domain_separator, setup_challenger())
 }
 
 pub fn create_test_settings() -> AirSettings {

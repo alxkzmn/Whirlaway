@@ -109,13 +109,13 @@ fn test_multi_round_verify() {
     let n_vars = 5;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
     let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
-    prove(
+    let _ = prove(
         1,
         &[&multilinear],
         &SimpleSumComputation,
@@ -148,13 +148,13 @@ fn test_verify_with_univariate_skip() {
     let skips = 2;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
     let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
-    prove(
+    let _ = prove(
         skips,
         &[&multilinear],
         &SimpleSumComputation,
@@ -191,13 +191,13 @@ fn test_verify_with_grinding() {
     let n_vars = 3;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
     let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
-    prove(
+    let _ = prove(
         1,
         &[&multilinear],
         &SimpleSumComputation,
@@ -230,7 +230,7 @@ fn test_verify_with_grinding() {
 
 #[test]
 fn test_verify_invalid_proof() {
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut verifier_state = VerifierState::new(&domain_separator, vec![], challenger);
 
@@ -245,13 +245,13 @@ fn test_verify_sum_mismatch() {
     let n_vars = 3;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
     let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
-    prove(
+    let _ = prove(
         1,
         &[&multilinear],
         &SimpleSumComputation,
@@ -285,13 +285,13 @@ fn test_verify_higher_degree() {
     let n_vars = 3;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
     let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
-    prove(
+    let _ = prove(
         1,
         &[&multilinear],
         &SimpleSumComputation,
@@ -327,13 +327,13 @@ fn test_verify_single_variable() {
     let n_vars = 4;
     let multilinear = create_simple_multilinear(n_vars);
 
-    let mut challenger = setup_challenger();
+    let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
     let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
-    prove(
+    let _ = prove(
         1,
         &[&multilinear],
         &SimpleSumComputation,
