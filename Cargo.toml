@@ -101,6 +101,7 @@ too_long_first_doc_paragraph = "allow"
 [workspace.dependencies]
 # Local
 air = { path = "crates/air" }
+air-test-utils = { path = "crates/air-test-utils" }
 sumcheck = { path = "crates/sumcheck" }
 utils = { path = "crates/utils" }
 

@@ -1,6 +1,5 @@
-mod helpers;
 use air::{AirSettings, table::AirTable};
-use helpers::*;
+use air_test_utils::*;
 use p3_dft::Radix2Bowers;
 use p3_field::{Field, PrimeCharacteristicRing};
 use utils::fiat_shamir::{ProverState, VerifierState};

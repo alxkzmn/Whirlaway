@@ -15,6 +15,7 @@ dependencies = [
 name = "air"
 version = "0.1.0"
 dependencies = [
+ "air-test-utils",
  "keccak_air",
  "p3-air",
  "p3-challenger",
@@ -31,6 +32,22 @@ dependencies = [
  "sumcheck",
  "tracing",
  "utils",
+ "whir-p3",
+]
+
+[[package]]
+name = "air-test-utils"
+version = "0.1.0"
+dependencies = [
+ "air",
+ "keccak_air",
+ "p3-air",
+ "p3-challenger",
+ "p3-field",
+ "p3-koala-bear",
+ "p3-matrix",
+ "p3-symmetric",
+ "rand",
  "whir-p3",
 ]
 
