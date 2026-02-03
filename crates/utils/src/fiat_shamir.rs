@@ -41,7 +41,7 @@ where
         self.challenger.observe_algebra_slice(scalars);
     }
 
-    pub fn challenger_mut(&mut self) -> &mut Challenger {
+    pub const fn challenger_mut(&mut self) -> &mut Challenger {
         &mut self.challenger
     }
 
@@ -106,7 +106,7 @@ where
         Ok(out)
     }
 
-    pub fn challenger_mut(&mut self) -> &mut Challenger {
+    pub const fn challenger_mut(&mut self) -> &mut Challenger {
         &mut self.challenger
     }
 

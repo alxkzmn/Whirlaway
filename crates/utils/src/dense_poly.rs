@@ -7,7 +7,7 @@ pub struct DensePolynomial<F: Field> {
 
 impl<F: Field> DensePolynomial<F> {
     #[must_use]
-    pub fn from_coefficients_vec(coeffs: Vec<F>) -> Self {
+    pub const fn from_coefficients_vec(coeffs: Vec<F>) -> Self {
         Self { coeffs }
     }
 

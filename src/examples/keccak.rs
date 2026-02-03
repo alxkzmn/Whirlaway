@@ -129,7 +129,7 @@ pub fn prove_keccak(
     let t = Instant::now();
 
     let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
-        table.build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
+        table.build_whir_params(&settings, merkle_hash, merkle_compress);
     let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
     domainsep.commit_statement::<_, _, _, { KECCAK_DIGEST_ELEMS }>(&whir_params);
     domainsep.add_whir_proof::<_, _, _, { KECCAK_DIGEST_ELEMS }>(&whir_params);
@@ -140,8 +140,8 @@ pub fn prove_keccak(
 
     let whir_proof = table.prove(
         &settings,
-        merkle_hash.clone(),
-        merkle_compress.clone(),
+        merkle_hash,
+        merkle_compress,
         &mut prover_state,
         witness,
     );
