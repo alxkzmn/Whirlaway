@@ -80,15 +80,15 @@ fn test_matrix_down_lde_truth_table_n3() {
 fn test_column_up() {
     let log_length = 3;
     let column = create_test_column(log_length);
-    let original_second_last = column.evals()[column.num_evals() - 2];
+    let original_second_last = column.as_slice()[column.num_evals() - 2];
 
     let up = column_up(&column);
 
     // Last element should equal second-to-last
-    assert_eq!(up.evals()[up.num_evals() - 1], original_second_last);
+    assert_eq!(up.as_slice()[up.num_evals() - 1], original_second_last);
     // Other elements should be the same
     for i in 0..column.num_evals() - 1 {
-        assert_eq!(up.evals()[i], column.evals()[i]);
+        assert_eq!(up.as_slice()[i], column.as_slice()[i]);
     }
 }
 
@@ -96,15 +96,15 @@ fn test_column_up() {
 fn test_column_down() {
     let log_length = 3;
     let column = create_test_column(log_length);
-    let original_last = column.evals()[column.num_evals() - 1];
+    let original_last = column.as_slice()[column.num_evals() - 1];
 
     let down = column_down(&column);
 
     // First element should be second element of original
-    assert_eq!(down.evals()[0], column.evals()[1]);
+    assert_eq!(down.as_slice()[0], column.as_slice()[1]);
     // Last element should be duplicated
-    assert_eq!(down.evals()[down.num_evals() - 1], original_last);
-    assert_eq!(down.evals()[down.num_evals() - 2], original_last);
+    assert_eq!(down.as_slice()[down.num_evals() - 1], original_last);
+    assert_eq!(down.as_slice()[down.num_evals() - 2], original_last);
     // Length should be the same
     assert_eq!(down.num_evals(), column.num_evals());
 }
@@ -124,13 +124,13 @@ fn test_columns_up_and_down() {
     // First half should be "up" versions
     for i in 0..columns.len() {
         let up = column_up(columns[i]);
-        assert_eq!(result[i].evals(), up.evals());
+        assert_eq!(result[i].as_slice(), up.as_slice());
     }
 
     // Second half should be "down" versions
     for i in 0..columns.len() {
         let down = column_down(columns[i]);
-        assert_eq!(result[columns.len() + i].evals(), down.evals());
+        assert_eq!(result[columns.len() + i].as_slice(), down.as_slice());
     }
 }
 
@@ -140,7 +140,7 @@ fn test_column_up_two_rows() {
     let up = column_up(&column);
 
     // Last element should equal second-to-last.
-    assert_eq!(up.evals(), &[F::new(7), F::new(7)]);
+    assert_eq!(up.as_slice(), &[F::new(7), F::new(7)]);
 }
 
 #[test]
@@ -149,7 +149,7 @@ fn test_column_down_two_rows() {
     let down = column_down(&column);
 
     // Shift left and duplicate last.
-    assert_eq!(down.evals(), &[F::new(9), F::new(9)]);
+    assert_eq!(down.as_slice(), &[F::new(9), F::new(9)]);
 }
 
 // Note: next_mle is a private function used by matrix_down_lde.

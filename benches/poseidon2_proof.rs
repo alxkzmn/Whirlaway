@@ -8,6 +8,7 @@ use p3_matrix::Matrix;
 use p3_poseidon2_air::{Poseidon2Air, RoundConstants, generate_trace_rows};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use utils::fiat_shamir::{ProverState, VerifierState};
 use whir_p3::{
     fiat_shamir::domain_separator::DomainSeparator, parameters::FoldingFactor,
     parameters::errors::SecurityAssumption, whir::parameters::WhirConfig,
@@ -121,8 +122,8 @@ fn bench(c: &mut Criterion) {
 
                     let challenger = MyChallenger::new(poseidon16);
 
-                    let mut prover_state = domainsep.to_prover_state(challenger.clone());
-                    table.prove(
+                    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
+                    let _whir_proof = table.prove(
                         &settings,
                         merkle_hash,
                         merkle_compress,
@@ -181,8 +182,8 @@ fn bench(c: &mut Criterion) {
 
     let challenger = MyChallenger::new(poseidon16);
 
-    let mut prover_state = domainsep.to_prover_state(challenger.clone());
-    table.prove(
+    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
+    let whir_proof = table.prove(
         &settings,
         merkle_hash.clone(),
         merkle_compress.clone(),
@@ -192,14 +193,18 @@ fn bench(c: &mut Criterion) {
 
     group.bench_function("verify", |b| {
         b.iter(|| {
-            let mut verifier_state =
-                domainsep.to_verifier_state(prover_state.proof_data().to_vec(), challenger.clone());
+            let mut verifier_state = VerifierState::new(
+                &domainsep,
+                prover_state.proof_data().to_vec(),
+                challenger.clone(),
+            );
             let _ = table.verify(
                 &settings,
                 merkle_hash.clone(),
                 merkle_compress.clone(),
                 &mut verifier_state,
                 log_n_rows,
+                &whir_proof,
             );
         });
     });

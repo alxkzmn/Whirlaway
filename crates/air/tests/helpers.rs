@@ -7,9 +7,10 @@ use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
 use p3_matrix::Matrix;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use utils::fiat_shamir::ProverState;
 use whir_p3::fiat_shamir::domain_separator::DomainSeparator;
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
-use whir_p3::{fiat_shamir::prover::ProverState, poly::evals::EvaluationsList};
+use whir_p3::poly::evals::EvaluationsList;
 
 pub type F = KoalaBear;
 pub type EF = BinomialExtensionField<F, 8>;
@@ -103,14 +104,16 @@ pub fn create_satisfying_columns(log_length: usize, n_columns: usize) -> Vec<Eva
         return cols;
     }
     let n_rows = 1 << log_length;
+    let mut last_evals = cols[n_columns - 1].as_slice().to_vec();
     for row in 0..n_rows {
         let sum_other: F = cols
             .iter()
             .take(n_columns - 1)
-            .map(|c| c.evals()[row])
+            .map(|c| c.as_slice()[row])
             .sum();
-        cols[n_columns - 1].evals_mut()[row] = -sum_other;
+        last_evals[row] = -sum_other;
     }
+    cols[n_columns - 1] = EvaluationsList::new(last_evals);
     cols
 }
 

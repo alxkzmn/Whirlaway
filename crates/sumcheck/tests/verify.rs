@@ -5,12 +5,8 @@ use p3_field::{
 use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use sumcheck::{SumcheckGrinding, prove, verify, verify_with_univariate_skip};
-use whir_p3::{
-    fiat_shamir::{
-        domain_separator::DomainSeparator, prover::ProverState, verifier::VerifierState,
-    },
-    poly::evals::EvaluationsList,
-};
+use utils::fiat_shamir::{ProverState, VerifierState};
+use whir_p3::{fiat_shamir::domain_separator::DomainSeparator, poly::evals::EvaluationsList};
 
 type F = KoalaBear;
 type EF = BinomialExtensionField<F, 8>;
@@ -73,7 +69,7 @@ fn test_basic_verify() {
     let challenger = setup_challenger();
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-    let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+    let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
     // Prove
     let (_challenges, _folded, _final_sum) = prove(
@@ -117,7 +113,7 @@ fn test_multi_round_verify() {
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-    let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+    let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
     prove(
         1,
@@ -156,7 +152,7 @@ fn test_verify_with_univariate_skip() {
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-    let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+    let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
     prove(
         skips,
@@ -199,7 +195,7 @@ fn test_verify_with_grinding() {
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-    let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+    let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
     prove(
         1,
@@ -253,7 +249,7 @@ fn test_verify_sum_mismatch() {
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-    let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+    let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
     prove(
         1,
@@ -273,7 +269,7 @@ fn test_verify_sum_mismatch() {
     // Corrupt the proof data
     let mut proof_data = prover_state.proof_data().to_vec();
     if !proof_data.is_empty() {
-        proof_data[0] = F::ZERO; // Corrupt first element
+        proof_data[0] = EF::ZERO; // Corrupt first element
     }
 
     let mut verifier_state = VerifierState::new(&domain_separator, proof_data, challenger);
@@ -293,7 +289,7 @@ fn test_verify_higher_degree() {
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-    let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+    let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
     prove(
         1,
@@ -335,7 +331,7 @@ fn test_verify_single_variable() {
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-    let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+    let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
     prove(
         1,

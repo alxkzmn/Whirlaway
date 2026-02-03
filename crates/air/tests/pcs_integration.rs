@@ -1,23 +1,22 @@
 mod helpers;
 use air::{AirSettings, table::AirTable};
 use helpers::*;
-use p3_field::PrimeCharacteristicRing;
-use p3_util::log2_strict_usize;
+use p3_dft::Radix2Bowers;
+use p3_field::{Field, PrimeCharacteristicRing};
+use utils::fiat_shamir::{ProverState, VerifierState};
 use utils::packed_multilinear;
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 use whir_p3::{
-    dft::EvalsDft,
-    fiat_shamir::{domain_separator::DomainSeparator, prover::ProverState},
-    poly::{evals::EvaluationsList, multilinear::MultilinearPoint},
+    fiat_shamir::domain_separator::DomainSeparator,
+    poly::multilinear::MultilinearPoint,
     whir::{
-        committer::reader::CommitmentReader,
-        committer::writer::CommitmentWriter,
-        parameters::WhirConfig,
-        prover::Prover,
-        statement::{Statement, weights::Weights},
-        verifier::Verifier,
+        committer::reader::CommitmentReader, committer::writer::CommitmentWriter,
+        constraints::statement::EqStatement, parameters::WhirConfig, proof::WhirProof,
+        prover::Prover, verifier::Verifier,
     },
 };
+
+type PF = <F as Field>::Packing;
 
 fn create_pcs_settings() -> AirSettings {
     AirSettings::new(
@@ -50,23 +49,30 @@ fn test_pcs_commitment_creation() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut prover_state = domainsep.to_prover_state(challenger);
+    let mut prover_state = ProverState::new(&domainsep, challenger);
 
     let committer = CommitmentWriter::new(&whir_params);
     let packed_pol = packed_multilinear(&witness);
 
-    let ext_dim = <EF as p3_field::BasedVectorSpace<F>>::DIMENSION;
-    let dft = EvalsDft::new(
-        1 << (table.log_n_witness_columns() + log_length + settings.whir_log_inv_rate
-            - log2_strict_usize(ext_dim)),
-    );
+    let dft = Radix2Bowers;
 
-    let commitment = committer
-        .commit(&dft, &mut prover_state, packed_pol)
+    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
+    let _commitment = committer
+        .commit::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            packed_pol,
+        )
         .unwrap();
 
     // Commitment should be created successfully
-    assert!(!prover_state.proof_data().is_empty());
+    assert!(
+        whir_proof
+            .initial_commitment
+            .iter()
+            .any(|&word| word != F::ZERO)
+    );
 }
 
 #[test]
@@ -90,30 +96,36 @@ fn test_pcs_commitment_parsing() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut prover_state = domainsep.to_prover_state(challenger.clone());
+    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
 
     let committer = CommitmentWriter::new(&whir_params);
     let packed_pol = packed_multilinear(&witness);
 
-    let ext_dim = <EF as p3_field::BasedVectorSpace<F>>::DIMENSION;
-    let dft = EvalsDft::new(
-        1 << (table.log_n_witness_columns() + log_length + settings.whir_log_inv_rate
-            - log2_strict_usize(ext_dim)),
-    );
+    let dft = Radix2Bowers;
 
+    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
     committer
-        .commit(&dft, &mut prover_state, packed_pol)
+        .commit::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            packed_pol,
+        )
         .unwrap();
 
     // Parse commitment on verifier side
     let mut verifier_state =
-        domainsep.to_verifier_state(prover_state.proof_data().to_vec(), challenger);
+        VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger);
     let commitment_reader = CommitmentReader::new(&whir_params);
 
-    let parsed_commitment = commitment_reader.parse_commitment::<8>(&mut verifier_state);
+    let parsed_commitment =
+        commitment_reader.parse_commitment::<F, 8>(&whir_proof, verifier_state.challenger_mut());
 
     // Should parse successfully
-    assert!(parsed_commitment.is_ok());
+    assert_eq!(
+        parsed_commitment.ood_statement.num_variables(),
+        whir_params.num_variables
+    );
 }
 
 #[test]
@@ -137,19 +149,21 @@ fn test_pcs_opening_proof() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut prover_state = domainsep.to_prover_state(challenger.clone());
+    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
 
     let committer = CommitmentWriter::new(&whir_params);
     let packed_pol = packed_multilinear(&witness);
 
-    let ext_dim = <EF as p3_field::BasedVectorSpace<F>>::DIMENSION;
-    let dft = EvalsDft::new(
-        1 << (table.log_n_witness_columns() + log_length + settings.whir_log_inv_rate
-            - log2_strict_usize(ext_dim)),
-    );
+    let dft = Radix2Bowers;
 
+    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
     let packed_witness = committer
-        .commit(&dft, &mut prover_state, packed_pol)
+        .commit::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            packed_pol,
+        )
         .unwrap();
 
     // Create opening proof for an actual evaluation of the committed packed witness.
@@ -160,25 +174,35 @@ fn test_pcs_opening_proof() {
         .collect();
     let value = packed_witness
         .polynomial
-        .evaluate::<EF>(&MultilinearPoint(point.clone()));
+        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(point.clone()));
 
-    let mut statement = Statement::<EF>::new(num_vars);
-    statement.add_constraint(Weights::evaluation(MultilinearPoint(point.clone())), value);
+    let mut statement = EqStatement::<EF>::initialize(num_vars);
+    statement.add_evaluated_constraint(MultilinearPoint::new(point.clone()), value);
 
     prover
-        .prove(&dft, &mut prover_state, statement.clone(), packed_witness)
+        .prove::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            statement.clone(),
+            packed_witness,
+        )
         .unwrap();
 
     // Verify opening proof
     let proof_data = prover_state.proof_data().to_vec();
-    let mut verifier_state = domainsep.to_verifier_state(proof_data, challenger);
+    let mut verifier_state = VerifierState::new(&domainsep, proof_data, challenger);
     let commitment_reader = CommitmentReader::new(&whir_params);
-    let parsed_commitment = commitment_reader
-        .parse_commitment::<8>(&mut verifier_state)
-        .unwrap();
+    let parsed_commitment =
+        commitment_reader.parse_commitment::<F, 8>(&whir_proof, verifier_state.challenger_mut());
     let verifier = Verifier::new(&whir_params);
     verifier
-        .verify(&mut verifier_state, &parsed_commitment, &statement)
+        .verify::<PF, F, PF, 8>(
+            &whir_proof,
+            verifier_state.challenger_mut(),
+            &parsed_commitment,
+            statement,
+        )
         .unwrap();
 }
 
@@ -203,19 +227,21 @@ fn test_pcs_invalid_opening() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut prover_state = domainsep.to_prover_state(challenger.clone());
+    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
 
     let committer = CommitmentWriter::new(&whir_params);
     let packed_pol = packed_multilinear(&witness);
 
-    let ext_dim = <EF as p3_field::BasedVectorSpace<F>>::DIMENSION;
-    let dft = EvalsDft::new(
-        1 << (table.log_n_witness_columns() + log_length + settings.whir_log_inv_rate
-            - log2_strict_usize(ext_dim)),
-    );
+    let dft = Radix2Bowers;
 
+    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
     let packed_witness = committer
-        .commit(&dft, &mut prover_state, packed_pol)
+        .commit::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            packed_pol,
+        )
         .unwrap();
 
     // Prove a correct opening...
@@ -226,36 +252,40 @@ fn test_pcs_invalid_opening() {
         .collect();
     let correct_value = packed_witness
         .polynomial
-        .evaluate::<EF>(&MultilinearPoint(point.clone()));
+        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(point.clone()));
 
-    let mut statement = Statement::<EF>::new(num_vars);
-    statement.add_constraint(
-        Weights::evaluation(MultilinearPoint(point.clone())),
-        correct_value,
-    );
+    let mut statement = EqStatement::<EF>::initialize(num_vars);
+    statement.add_evaluated_constraint(MultilinearPoint::new(point.clone()), correct_value);
 
     prover
-        .prove(&dft, &mut prover_state, statement, packed_witness)
+        .prove::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            statement,
+            packed_witness,
+        )
         .unwrap();
 
     // ...but verify against a *wrong* value.
     let wrong_value = correct_value + EF::ONE;
-    let mut wrong_statement = Statement::<EF>::new(num_vars);
-    wrong_statement.add_constraint(
-        Weights::evaluation(MultilinearPoint(point.clone())),
-        wrong_value,
-    );
+    let mut wrong_statement = EqStatement::<EF>::initialize(num_vars);
+    wrong_statement.add_evaluated_constraint(MultilinearPoint::new(point.clone()), wrong_value);
 
     let proof_data = prover_state.proof_data().to_vec();
-    let mut verifier_state = domainsep.to_verifier_state(proof_data, challenger);
+    let mut verifier_state = VerifierState::new(&domainsep, proof_data, challenger);
     let commitment_reader = CommitmentReader::new(&whir_params);
-    let parsed_commitment = commitment_reader
-        .parse_commitment::<8>(&mut verifier_state)
-        .unwrap();
+    let parsed_commitment =
+        commitment_reader.parse_commitment::<F, 8>(&whir_proof, verifier_state.challenger_mut());
     let verifier = Verifier::new(&whir_params);
     assert!(
         verifier
-            .verify(&mut verifier_state, &parsed_commitment, &wrong_statement)
+            .verify::<PF, F, PF, 8>(
+                &whir_proof,
+                verifier_state.challenger_mut(),
+                &parsed_commitment,
+                wrong_statement,
+            )
             .is_err()
     );
 }
@@ -281,19 +311,21 @@ fn test_pcs_multiple_evaluations() {
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut prover_state = domainsep.to_prover_state(challenger.clone());
+    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
 
     let committer = CommitmentWriter::new(&whir_params);
     let packed_pol = packed_multilinear(&witness);
 
-    let ext_dim = <EF as p3_field::BasedVectorSpace<F>>::DIMENSION;
-    let dft = EvalsDft::new(
-        1 << (table.log_n_witness_columns() + log_length + settings.whir_log_inv_rate
-            - log2_strict_usize(ext_dim)),
-    );
+    let dft = Radix2Bowers;
 
+    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
     let packed_witness = committer
-        .commit(&dft, &mut prover_state, packed_pol)
+        .commit::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            packed_pol,
+        )
         .unwrap();
 
     // Create statement with multiple constraints, using correct evaluations.
@@ -307,34 +339,38 @@ fn test_pcs_multiple_evaluations() {
         .collect();
     let value1 = packed_witness
         .polynomial
-        .evaluate::<EF>(&MultilinearPoint(point1.clone()));
+        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(point1.clone()));
     let value2 = packed_witness
         .polynomial
-        .evaluate::<EF>(&MultilinearPoint(point2.clone()));
+        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(point2.clone()));
 
-    let mut statement = Statement::<EF>::new(num_vars);
-    statement.add_constraint(
-        Weights::evaluation(MultilinearPoint(point1.clone())),
-        value1,
-    );
-    statement.add_constraint(
-        Weights::evaluation(MultilinearPoint(point2.clone())),
-        value2,
-    );
+    let mut statement = EqStatement::<EF>::initialize(num_vars);
+    statement.add_evaluated_constraint(MultilinearPoint::new(point1.clone()), value1);
+    statement.add_evaluated_constraint(MultilinearPoint::new(point2.clone()), value2);
 
     prover
-        .prove(&dft, &mut prover_state, statement.clone(), packed_witness)
+        .prove::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            statement.clone(),
+            packed_witness,
+        )
         .unwrap();
 
     let proof_data = prover_state.proof_data().to_vec();
-    let mut verifier_state = domainsep.to_verifier_state(proof_data, challenger);
+    let mut verifier_state = VerifierState::new(&domainsep, proof_data, challenger);
     let commitment_reader = CommitmentReader::new(&whir_params);
-    let parsed_commitment = commitment_reader
-        .parse_commitment::<8>(&mut verifier_state)
-        .unwrap();
+    let parsed_commitment =
+        commitment_reader.parse_commitment::<F, 8>(&whir_proof, verifier_state.challenger_mut());
     let verifier = Verifier::new(&whir_params);
     verifier
-        .verify(&mut verifier_state, &parsed_commitment, &statement)
+        .verify::<PF, F, PF, 8>(
+            &whir_proof,
+            verifier_state.challenger_mut(),
+            &parsed_commitment,
+            statement,
+        )
         .unwrap();
 }
 
@@ -359,18 +395,20 @@ fn test_pcs_different_polynomial_sizes() {
         domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
         let challenger = setup_challenger();
-        let mut prover_state = domainsep.to_prover_state(challenger.clone());
+        let mut prover_state = ProverState::new(&domainsep, challenger.clone());
 
         let committer = CommitmentWriter::new(&whir_params);
         let packed_pol = packed_multilinear(&witness);
 
-        let ext_dim = <EF as p3_field::BasedVectorSpace<F>>::DIMENSION;
-        let dft = EvalsDft::new(
-            1 << (table.log_n_witness_columns() + log_length + settings.whir_log_inv_rate
-                - log2_strict_usize(ext_dim)),
-        );
+        let dft = Radix2Bowers;
 
-        let commitment = committer.commit(&dft, &mut prover_state, packed_pol);
+        let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
+        let commitment = committer.commit::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            packed_pol,
+        );
 
         // Should work for different sizes
         assert!(commitment.is_ok());

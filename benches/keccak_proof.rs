@@ -2,24 +2,23 @@ use air::AirSettings;
 use air::table::AirTable;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use keccak_air::{KeccakAir, generate_trace_rows};
-use p3_challenger::DuplexChallenger;
+use p3_challenger::{HashChallenger, SerializingChallenger32};
 use p3_field::extension::BinomialExtensionField;
-use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
+use p3_keccak::Keccak256Hash;
+use p3_koala_bear::KoalaBear;
 use p3_matrix::Matrix;
-use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use rand::{Rng, SeedableRng, rngs::StdRng};
+use utils::{ProverState, VerifierState};
 use whir_p3::{
     fiat_shamir::domain_separator::DomainSeparator, parameters::FoldingFactor,
     parameters::errors::SecurityAssumption, whir::parameters::WhirConfig,
 };
 
-// Koalabear
-type Poseidon16 = Poseidon2KoalaBear<16>;
-type Poseidon24 = Poseidon2KoalaBear<24>;
+use whirlaway::hashers::{KECCAK_DIGEST_ELEMS, KeccakNodeCompress, KeccakU32BeLeafHasher};
 
-type MerkleHash = PaddingFreeSponge<Poseidon24, 24, 16, 8>; // leaf hashing
-type MerkleCompress = TruncatedPermutation<Poseidon16, 2, 8, 16>; // 2-to-1 compression
-type MyChallenger = DuplexChallenger<F, Poseidon16, 16, 8>;
+type MerkleHash = KeccakU32BeLeafHasher; // leaf hashing
+type MerkleCompress = KeccakNodeCompress; // 2-to-1 compression
+type MyChallenger = SerializingChallenger32<F, HashChallenger<u8, Keccak256Hash, 32>>;
 
 // Koalabear
 type F = KoalaBear;
@@ -76,22 +75,20 @@ fn bench(c: &mut Criterion) {
                         3,
                     );
 
-                    let poseidon16 = Poseidon16::new_from_rng_128(&mut rng);
-                    let poseidon24 = Poseidon24::new_from_rng_128(&mut rng);
-                    let merkle_hash = MerkleHash::new(poseidon24);
-                    let merkle_compress = MerkleCompress::new(poseidon16.clone());
+                    let merkle_hash = MerkleHash::default();
+                    let merkle_compress = MerkleCompress::default();
 
                     let whir_params: WhirConfig<_, _, _, _, MyChallenger> = table
                         .build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
                     let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
-                    domainsep.commit_statement::<_, _, _, 8>(&whir_params);
-                    domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
+                    domainsep.commit_statement::<_, _, _, KECCAK_DIGEST_ELEMS>(&whir_params);
+                    domainsep.add_whir_proof::<_, _, _, KECCAK_DIGEST_ELEMS>(&whir_params);
 
-                    let challenger = MyChallenger::new(poseidon16);
+                    let challenger = MyChallenger::from_hasher(Vec::new(), Keccak256Hash);
 
-                    let mut prover_state = domainsep.to_prover_state(challenger.clone());
+                    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
 
-                    table.prove(
+                    let _whir_proof = table.prove(
                         &settings,
                         merkle_hash.clone(),
                         merkle_compress.clone(),
@@ -137,10 +134,8 @@ fn bench(c: &mut Criterion) {
                     3,
                 );
 
-                let poseidon16 = Poseidon16::new_from_rng_128(&mut rng);
-                let poseidon24 = Poseidon24::new_from_rng_128(&mut rng);
-                let merkle_hash = MerkleHash::new(poseidon24);
-                let merkle_compress = MerkleCompress::new(poseidon16.clone());
+                let merkle_hash = MerkleHash::default();
+                let merkle_compress = MerkleCompress::default();
 
                 let whir_params: WhirConfig<_, _, _, _, MyChallenger> = table.build_whir_params(
                     &settings,
@@ -148,14 +143,14 @@ fn bench(c: &mut Criterion) {
                     merkle_compress.clone(),
                 );
                 let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
-                domainsep.commit_statement::<_, _, _, 8>(&whir_params);
-                domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
+                domainsep.commit_statement::<_, _, _, KECCAK_DIGEST_ELEMS>(&whir_params);
+                domainsep.add_whir_proof::<_, _, _, KECCAK_DIGEST_ELEMS>(&whir_params);
 
-                let challenger = MyChallenger::new(poseidon16);
+                let challenger = MyChallenger::from_hasher(Vec::new(), Keccak256Hash);
 
-                let mut prover_state = domainsep.to_prover_state(challenger.clone());
+                let mut prover_state = ProverState::new(&domainsep, challenger.clone());
 
-                table.prove(
+                let whir_proof = table.prove(
                     &settings,
                     merkle_hash.clone(),
                     merkle_compress.clone(),
@@ -166,6 +161,7 @@ fn bench(c: &mut Criterion) {
                 (
                     domainsep,
                     prover_state,
+                    whir_proof,
                     challenger,
                     table,
                     merkle_hash,
@@ -176,14 +172,18 @@ fn bench(c: &mut Criterion) {
             |(
                 domainsep,
                 prover_state,
+                whir_proof,
                 challenger,
                 table,
                 merkle_hash,
                 merkle_compress,
                 log_length,
             )| {
-                let mut verifier_state =
-                    domainsep.to_verifier_state(prover_state.proof_data().to_vec(), challenger);
+                let mut verifier_state = VerifierState::new(
+                    &domainsep,
+                    prover_state.proof_data().to_vec(),
+                    challenger,
+                );
                 table
                     .verify(
                         &settings,
@@ -191,6 +191,7 @@ fn bench(c: &mut Criterion) {
                         merkle_compress,
                         &mut verifier_state,
                         log_length,
+                        &whir_proof,
                     )
                     .unwrap();
             },

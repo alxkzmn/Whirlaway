@@ -3,10 +3,9 @@ use p3_field::{PrimeCharacteristicRing, extension::BinomialExtensionField};
 use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use sumcheck::{SumcheckGrinding, prove, verify, verify_with_univariate_skip};
+use utils::fiat_shamir::{ProverState, VerifierState};
 use whir_p3::{
-    fiat_shamir::{
-        domain_separator::DomainSeparator, prover::ProverState, verifier::VerifierState,
-    },
+    fiat_shamir::domain_separator::DomainSeparator,
     poly::{evals::EvaluationsList, multilinear::MultilinearPoint},
 };
 
@@ -75,7 +74,7 @@ fn test_end_to_end_prove_verify() {
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-    let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+    let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
     // Prove
     let (_challenges, _folded, final_sum) = prove(
@@ -107,7 +106,8 @@ fn test_end_to_end_prove_verify() {
     assert_eq!(eval.point.len(), n_vars);
     assert_eq!(eval.value, final_sum);
 
-    let expected_value = multilinear.evaluate::<EF>(&MultilinearPoint(eval.point.clone()));
+    let expected_value = multilinear
+        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }
 
@@ -121,7 +121,7 @@ fn test_end_to_end_various_degrees() {
         let domain_separator = DomainSeparator::new(vec![]);
         let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-        let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+        let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
         let (_challenges, _folded, final_sum) = prove(
             1,
@@ -152,7 +152,8 @@ fn test_end_to_end_various_degrees() {
         .unwrap();
         assert_eq!(verified_sum, expected_sum);
         assert_eq!(eval.value, final_sum);
-        let expected_value = multilinear.evaluate::<EF>(&MultilinearPoint(eval.point.clone()));
+        let expected_value = multilinear
+            .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
         assert_eq!(eval.value, expected_value);
     }
 }
@@ -170,10 +171,10 @@ fn test_end_to_end_multiple_multilinears() {
 
     // Sum of all three multilinears
     let expected_sum: EF = multilinear1
-        .evals()
+        .as_slice()
         .iter()
-        .zip(multilinear2.evals().iter())
-        .zip(multilinear3.evals().iter())
+        .zip(multilinear2.as_slice().iter())
+        .zip(multilinear3.as_slice().iter())
         .map(|((&a, &b), &c)| EF::from(a) + EF::from(b) + EF::from(c))
         .sum();
 
@@ -206,10 +207,10 @@ fn test_end_to_end_multiple_multilinears() {
             .unwrap();
     assert_eq!(verified_sum, expected_sum);
     assert_eq!(eval.value, final_sum);
-    let point = MultilinearPoint(eval.point.clone());
-    let expected_value = multilinear1.evaluate::<EF>(&point)
-        + multilinear2.evaluate::<EF>(&point)
-        + multilinear3.evaluate::<EF>(&point);
+    let point = MultilinearPoint::new(eval.point.clone());
+    let expected_value = multilinear1.evaluate_hypercube_base::<EF>(&point)
+        + multilinear2.evaluate_hypercube_base::<EF>(&point)
+        + multilinear3.evaluate_hypercube_base::<EF>(&point);
     assert_eq!(eval.value, expected_value);
 }
 
@@ -224,7 +225,7 @@ fn test_end_to_end_with_univariate_skip() {
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-    let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+    let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
     let (_challenges, _folded, final_sum) = prove(
         skips,
@@ -265,7 +266,7 @@ fn test_end_to_end_with_grinding() {
     let domain_separator = DomainSeparator::new(vec![]);
     let mut prover_state = ProverState::new(&domain_separator, challenger.clone());
 
-    let expected_sum: EF = multilinear.evals().iter().map(|&x| EF::from(x)).sum();
+    let expected_sum: EF = multilinear.as_slice().iter().map(|&x| EF::from(x)).sum();
 
     let (_challenges, _folded, final_sum) = prove(
         1,
@@ -296,7 +297,8 @@ fn test_end_to_end_with_grinding() {
     .unwrap();
     assert_eq!(verified_sum, expected_sum);
     assert_eq!(eval.value, final_sum);
-    let expected_value = multilinear.evaluate::<EF>(&MultilinearPoint(eval.point.clone()));
+    let expected_value = multilinear
+        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }
 
@@ -337,6 +339,7 @@ fn test_end_to_end_zerocheck() {
             .unwrap();
     assert_eq!(verified_sum, expected_sum);
     assert_eq!(eval.value, final_sum);
-    let expected_value = multilinear.evaluate::<EF>(&MultilinearPoint(eval.point.clone()));
+    let expected_value = multilinear
+        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
 }

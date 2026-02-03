@@ -14,13 +14,43 @@ pub fn fold_multilinear_in_small_field<F: Field, EF: ExtensionField<F>>(
     assert!(scalars.len().is_power_of_two() && scalars.len() <= m.num_evals());
     let new_size = m.num_evals() / scalars.len();
 
-    if TypeId::of::<F>() == TypeId::of::<EF>() {
-        return unsafe {
-            std::mem::transmute(fold_multilinear_packed::<F>(
-                std::mem::transmute(m),
-                scalars,
-            ))
-        };
+    // Case skips == 1:
+    if scalars.len() == 2 {
+        let new_size = m.num_evals() / 2;
+        let (first_half, second_half) = m.as_slice().split_at(new_size);
+
+        EvaluationsList::new(
+            first_half
+                .par_iter()
+                .zip(second_half.par_iter())
+                .map(|(&a, &b)| a * scalars[0] + b * scalars[1])
+                .collect(),
+        )
+    } else {
+        let new_size = m.num_evals() / scalars.len();
+        if TypeId::of::<F>() == TypeId::of::<EF>() {
+            return unsafe {
+                std::mem::transmute::<EvaluationsList<F>, EvaluationsList<EF>>(
+                    fold_multilinear_packed::<F>(
+                        std::mem::transmute::<&EvaluationsList<EF>, &EvaluationsList<F>>(m),
+                        scalars,
+                    ),
+                )
+            };
+        }
+
+        EvaluationsList::new(
+            (0..new_size)
+                .into_par_iter()
+                .map(|i| {
+                    scalars
+                        .iter()
+                        .enumerate()
+                        .map(|(j, s)| m.as_slice()[i + j * new_size] * *s)
+                        .sum()
+                })
+                .collect(),
+        )
     }
 
     EvaluationsList::new(
@@ -46,7 +76,7 @@ pub fn fold_multilinear_packed<F: Field>(
     let new_size = m.num_evals() / scalars.len();
 
     let inners = (0..scalars.len())
-        .map(|i| &m.evals()[i * new_size..(i + 1) * new_size])
+        .map(|i| &m.as_slice()[i * new_size..(i + 1) * new_size])
         .collect::<Vec<_>>();
 
     let inners_packed = inners
@@ -78,19 +108,34 @@ pub fn fold_multilinear_in_large_field<F: Field, EF: ExtensionField<F>>(
     scalars: &[EF],
 ) -> EvaluationsList<EF> {
     assert!(scalars.len().is_power_of_two() && scalars.len() <= m.num_evals());
-    let new_size = m.num_evals() / scalars.len();
-    EvaluationsList::new(
-        (0..new_size)
-            .into_par_iter()
-            .map(|i| {
-                scalars
-                    .iter()
-                    .enumerate()
-                    .map(|(j, s)| *s * m.evals()[i + j * new_size])
-                    .sum()
-            })
-            .collect(),
-    )
+
+    // Case skips == 1:
+    if scalars.len() == 2 {
+        let new_size = m.num_evals() / 2;
+        let (first_half, second_half) = m.as_slice().split_at(new_size);
+
+        EvaluationsList::new(
+            first_half
+                .par_iter()
+                .zip(second_half.par_iter())
+                .map(|(&a, &b)| scalars[0] * a + scalars[1] * b)
+                .collect(),
+        )
+    } else {
+        let new_size = m.num_evals() / scalars.len();
+        EvaluationsList::new(
+            (0..new_size)
+                .into_par_iter()
+                .map(|i| {
+                    scalars
+                        .iter()
+                        .enumerate()
+                        .map(|(j, s)| *s * m.as_slice()[i + j * new_size])
+                        .sum()
+                })
+                .collect(),
+        )
+    }
 }
 
 #[instrument(name = "multilinears_linear_combination", skip_all)]
@@ -110,7 +155,7 @@ pub fn multilinears_linear_combination<
         .map(|i| {
             dot_product(
                 scalars.iter().copied(),
-                pols.iter().map(|p| p.borrow().evals()[i]),
+                pols.iter().map(|p| p.borrow().as_slice()[i]),
             )
         })
         .collect::<Vec<_>>();
@@ -145,7 +190,7 @@ pub fn packed_multilinear<F: Field>(pols: &[EvaluationsList<F>]) -> EvaluationsL
     let mut offset = 0;
     // TODO parallelize
     for pol in pols {
-        dst[offset..offset + pol.num_evals()].copy_from_slice(pol.evals());
+        dst[offset..offset + pol.num_evals()].copy_from_slice(pol.as_slice());
         offset += pol.num_evals();
     }
     EvaluationsList::new(dst)
@@ -157,9 +202,9 @@ pub fn add_multilinears<F: Field>(
     pol2: &EvaluationsList<F>,
 ) -> EvaluationsList<F> {
     assert_eq!(pol1.num_variables(), pol2.num_variables());
-    let mut dst = pol1.evals().to_vec();
+    let mut dst = pol1.as_slice().to_vec();
     dst.par_iter_mut()
-        .zip(pol2.evals().par_iter())
+        .zip(pol2.as_slice().par_iter())
         .for_each(|(a, b)| *a += *b);
     EvaluationsList::new(dst)
 }

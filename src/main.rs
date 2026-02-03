@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), allow(unused_crate_dependencies))]
 
 mod examples;
+mod hashers;
 
 use air::AirSettings;
 use std::fmt::Display;

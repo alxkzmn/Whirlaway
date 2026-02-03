@@ -8,6 +8,7 @@ workspace = true
 
 [dependencies]
 p3-field.workspace = true
+p3-challenger.workspace = true
 rayon.workspace = true
 p3-air.workspace = true
 p3-matrix.workspace = true

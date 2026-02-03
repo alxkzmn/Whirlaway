@@ -3,11 +3,11 @@ use p3_challenger::{FieldChallenger, GrindingChallenger};
 use p3_field::{ExtensionField, Field, TwoAdicField};
 
 use p3_uni_stark::{SymbolicAirBuilder, get_symbolic_constraints};
-use utils::{log2_up, univariate_selectors};
+use utils::{DensePolynomial, log2_up, univariate_selectors};
 use whir_p3::{
-    parameters::{MultivariateParameters, ProtocolParameters},
-    poly::{dense::WhirDensePolynomial, evals::EvaluationsList},
-    whir::parameters::WhirConfig,
+    parameters::ProtocolParameters,
+    poly::evals::EvaluationsList,
+    whir::parameters::{InitialPhaseConfig, WhirConfig},
 };
 
 use crate::{AirSettings, WHIR_POW_BITS};
@@ -19,7 +19,7 @@ pub struct AirTable<F: Field, EF, A> {
     pub preprocessed_columns: Vec<EvaluationsList<F>>, // TODO 'sparse' preprocessed columns (with non zero values at cylic shifts)
     pub n_constraints: usize,
     pub constraint_degree: usize,
-    pub univariate_selectors: Vec<WhirDensePolynomial<F>>,
+    pub univariate_selectors: Vec<DensePolynomial<F>>,
 
     _phantom: std::marker::PhantomData<EF>,
 }
@@ -79,10 +79,8 @@ where
         Challenger: FieldChallenger<F> + GrindingChallenger<Witness = F>,
     {
         let num_variables = self.log_length + self.log_n_witness_columns();
-        let mv_params = MultivariateParameters::new(num_variables);
-
         let whir_params = ProtocolParameters {
-            initial_statement: true,
+            initial_phase_config: InitialPhaseConfig::WithStatementClassic,
             security_level: settings.security_bits,
             pow_bits: WHIR_POW_BITS,
             folding_factor: settings.whir_folding_factor,
@@ -91,9 +89,8 @@ where
             soundness_type: settings.whir_soudness_type,
             starting_log_inv_rate: settings.whir_log_inv_rate,
             rs_domain_initial_reduction_factor: settings.whir_initial_domain_reduction_factor,
-            univariate_skip: false,
         };
 
-        WhirConfig::new(mv_params, whir_params)
+        WhirConfig::new(num_variables, whir_params)
     }
 }

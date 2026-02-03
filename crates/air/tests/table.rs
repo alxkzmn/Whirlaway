@@ -91,10 +91,7 @@ fn test_air_table_build_whir_params() {
 
     // Should create valid WHIR parameters
     let expected_vars = log_length + table.log_n_witness_columns();
-    assert_eq!(
-        format!("{}", whir_params.mv_parameters),
-        format!("Number of variables: {}", expected_vars)
-    );
+    assert_eq!(whir_params.num_variables, expected_vars);
 }
 
 #[test]

@@ -8,11 +8,10 @@ use rayon::prelude::*;
 use tracing::instrument;
 use utils::{
     batch_fold_multilinear_in_large_field, batch_fold_multilinear_in_small_field,
-    univariate_selectors,
+    univariate_selectors, DensePolynomial, ProverState,
 };
 use whir_p3::{
-    fiat_shamir::prover::ProverState,
-    poly::{dense::WhirDensePolynomial, evals::EvaluationsList},
+    poly::evals::EvaluationsList,
 };
 
 use crate::{SumcheckComputation, SumcheckComputationPacked, SumcheckGrinding};
@@ -120,9 +119,29 @@ where
     StandardUniform: Distribution<EF>,
     Challenger: FieldChallenger<F> + GrindingChallenger<Witness = F>,
 {
-    let eq_mle = eq_factor.map(|eq_factor| EvaluationsList::eval_eq(&eq_factor[1 + round..]));
+    let eq_mle = eq_factor.map(|eq_factor| {
+        EvaluationsList::new_from_point(&eq_factor[1 + round..], EF::ONE)
+    });
 
-    let selectors = univariate_selectors::<F>(skips);
+    let selectors: Vec<DensePolynomial<F>> = if skips == 1 {
+        // In the case skips == 1, we do not need to compute the selectors, as they are S_0(x) = 1 - x and S_1(x) = x.
+        Vec::new()
+    } else {
+        univariate_selectors::<F>(skips)
+    };
+
+    let selectors_ef: Vec<DensePolynomial<EF>> = if skips == 1 {
+        Vec::new()
+    } else {
+        selectors
+            .iter()
+            .map(|s| {
+                DensePolynomial::from_coefficients_vec(
+                    s.coeffs.iter().copied().map(EF::from).collect(),
+                )
+            })
+            .collect()
+    };
 
     let mut p_evals = Vec::<(F, EF)>::new();
     let start = if is_zerofier {
@@ -134,21 +153,44 @@ where
     for z in start..=comp_degree * ((1 << skips) - 1) {
         let sum_z = if z == (1 << skips) - 1 {
             if let Some(eq_factor) = eq_factor {
-                (*sum
-                    - (0..(1 << skips) - 1)
-                        .map(|i| p_evals[i].1 * selectors[i].evaluate(eq_factor[round]))
-                        .sum::<EF>())
-                    / selectors[(1 << skips) - 1].evaluate(eq_factor[round])
+                if skips == 1 {
+                    (*sum - p_evals[0].1 * (EF::ONE - eq_factor[round])) / eq_factor[round]
+                } else {
+                    (*sum
+                        - (0..(1 << skips) - 1)
+                            .map(|i| {
+                                p_evals[i].1 * selectors_ef[i].evaluate(eq_factor[round])
+                            })
+                            .sum::<EF>())
+                        / selectors_ef[(1 << skips) - 1].evaluate(eq_factor[round])
+                }
             } else {
                 *sum - p_evals.iter().map(|(_, s)| *s).sum::<EF>()
             }
         } else {
-            let folding_scalars = selectors
-                .iter()
-                .map(|s| s.evaluate(F::from_usize(z)))
-                .collect::<Vec<_>>();
-            // If skips == 1 (ie classic sumcheck round, we could avoid 1 multiplication below: TODO not urgent)
-            let folded = batch_fold_multilinear_in_small_field(multilinears, &folding_scalars);
+            let folded = if skips == 1 && z == 0 {
+                // In this case, we don't need to use the folding function, because we just have to take the first half of the evaluations.
+                multilinears
+                    .par_iter()
+                    .map(|poly| {
+                        let evals = poly.as_slice();
+                        let (first_half, _) = evals.split_at(evals.len() / 2);
+                        EvaluationsList::new(first_half.to_vec())
+                    })
+                    .collect()
+            } else {
+                let folding_scalars = if skips == 1 {
+                    vec![F::ONE - F::from_usize(z), F::from_usize(z)]
+                } else {
+                    selectors
+                        .iter()
+                        .map(|s| s.evaluate(F::from_usize(z)))
+                        .collect::<Vec<_>>()
+                };
+
+                batch_fold_multilinear_in_small_field(multilinears, &folding_scalars)
+            };
+
             let mut sum_z =
                 compute_over_hypercube(&folded, computation, batching_scalars, eq_mle.as_ref());
             if let Some(missing_mul_factor) = missing_mul_factor {
@@ -161,18 +203,28 @@ where
         p_evals.push((F::from_usize(z), sum_z));
     }
 
-    let mut p = WhirDensePolynomial::lagrange_interpolation(&p_evals).unwrap();
+    let mut p = DensePolynomial::lagrange_interpolation(&p_evals).unwrap();
 
     if let Some(eq_factor) = &eq_factor {
         // https://eprint.iacr.org/2024/108.pdf Section 3.2
         // We do not take advantage of this trick to send less data, but we could do so in the future (TODO)
-        p *= &WhirDensePolynomial::lagrange_interpolation(
-            &(0..1 << skips)
-                .into_par_iter()
-                .map(|i| (F::from_usize(i), selectors[i].evaluate(eq_factor[round])))
-                .collect::<Vec<_>>(),
-        )
-        .unwrap();
+        if skips == 1 {
+            // We multiply `p` by the polynomial q(X) = 1 - r_j + (2 * r_j - 1) * X.
+            // This polynomial `q` interpolates the points (0, 1 - r_j) and (1, r_j).
+            let a = EF::ONE - eq_factor[round];
+            let b = EF::from_usize(2) * eq_factor[round] - EF::ONE;
+            let selector_poly = DensePolynomial::from_coefficients_vec(vec![a, b]);
+            p.mul_assign(&selector_poly);
+        } else {
+            let selector_poly = DensePolynomial::lagrange_interpolation(
+                &(0..1 << skips)
+                    .into_par_iter()
+                    .map(|i| (EF::from_usize(i), selectors_ef[i].evaluate(eq_factor[round])))
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+            p.mul_assign(&selector_poly);
+        }
     }
 
     fs_prover.add_extension_scalars(&p.coeffs);
@@ -192,14 +244,32 @@ where
         .collect::<Vec<_>>();
     if let Some(eq_factor) = eq_factor {
         *missing_mul_factor = Some(
-            selectors
-                .iter()
-                .map(|s| s.evaluate(eq_factor[round]) * s.evaluate(challenge))
-                .sum::<EF>()
-                * missing_mul_factor.unwrap_or(EF::ONE),
+            // Recall taht if skips == 1, the selectors are S_0 and S_1 with
+            // S_0(x) = 1 - x
+            // S_1(x) = x
+            if skips == 1 {
+                ((EF::ONE - eq_factor[round]) * (EF::ONE - challenge)
+                    + eq_factor[round] * challenge)
+                    * missing_mul_factor.unwrap_or(EF::ONE)
+            } else {
+                selectors_ef
+                    .iter()
+                    .map(|s| s.evaluate(eq_factor[round]) * s.evaluate(challenge))
+                    .sum::<EF>()
+                    * missing_mul_factor.unwrap_or(EF::ONE)
+            },
         );
     }
-    // If skips == 1 (ie classic sumcheck round, we could avoid 1 multiplication below: TODO not urgent)
+
+    let folding_scalars = if skips == 1 {
+        vec![EF::ONE - challenge, challenge]
+    } else {
+        selectors_ef
+            .iter()
+            .map(|s| s.evaluate(challenge))
+            .collect::<Vec<_>>()
+    };
+
     batch_fold_multilinear_in_large_field(multilinears, &folding_scalars)
 }
 
@@ -224,7 +294,7 @@ where
         let pols: &[EvaluationsList<F>] = unsafe { std::mem::transmute(pols) };
         let packed_pols = pols
             .iter()
-            .map(|p| F::Packing::pack_slice(p.evals()))
+            .map(|p| F::Packing::pack_slice(p.as_slice()))
             .collect::<Vec<_>>();
 
         let decomposed_batching_scalars: Vec<_> = (0..<EF as BasedVectorSpace<F>>::DIMENSION)
@@ -246,7 +316,7 @@ where
                 if let Some(eq_mle) = eq_mle {
                     res.enumerate()
                         .map(|(idx_in_packing, res)| {
-                            res * eq_mle.evals()[i * F::Packing::WIDTH + idx_in_packing]
+                            res * eq_mle.as_slice()[i * F::Packing::WIDTH + idx_in_packing]
                         })
                         .sum()
                 } else {
@@ -260,8 +330,8 @@ where
         (0..1 << n_vars)
             .into_par_iter()
             .map(|x| {
-                let point = pols.iter().map(|pol| pol.evals()[x]).collect::<Vec<_>>();
-                let eq_mle_eval = eq_mle.map(|p| p.evals()[x]);
+                let point = pols.iter().map(|pol| pol.as_slice()[x]).collect::<Vec<_>>();
+                let eq_mle_eval = eq_mle.map(|p| p.as_slice()[x]);
                 eval_sumcheck_computation(computation, batching_scalars, &point, eq_mle_eval)
             })
             .sum()

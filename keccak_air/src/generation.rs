@@ -64,8 +64,14 @@ pub fn generate_trace_rows<F: PrimeField64>(
 
 /// `rows` will normally consist of 24 rows, with an exception for the final row.
 fn generate_trace_rows_for_perm<F: PrimeField64>(rows: &mut [KeccakCols<F>], input: [u64; 25]) {
-    let mut current_state: [[u64; 5]; 5] = unsafe { transmute(input) };
+    // Convert flat input array to 5x5 matrix.
+    // The input uses standard Keccak indexing: input[x + 5*y] corresponds to state[x][y].
+    // After transmute, we get row-major layout: transmuted[i][j] = input[i*5 + j].
+    // To align with Keccak's state[x][y] = input[x + 5*y], we need to transpose.
+    let transmuted: [[u64; 5]; 5] = unsafe { transmute(input) };
+    let mut current_state: [[u64; 5]; 5] = array::from_fn(|x| array::from_fn(|y| transmuted[y][x]));
 
+    // initial_state is stored in y-major order for the AIR columns (preimage[y][x]).
     let initial_state: [[[F; 4]; 5]; 5] =
         array::from_fn(|y| array::from_fn(|x| u64_to_16_bit_limbs(current_state[x][y])));
 
