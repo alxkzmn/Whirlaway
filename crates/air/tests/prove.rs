@@ -11,8 +11,7 @@ use whir_p3::{
 #[test]
 fn test_air_prove_basic() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
-    let constraint_degree =
-        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
     let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
@@ -38,11 +37,8 @@ fn test_air_prove_basic() {
         witness,
     );
 
-    let mut verifier_state = VerifierState::new(
-        &domainsep,
-        prover_state.proof_data().to_vec(),
-        challenger,
-    );
+    let mut verifier_state =
+        VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger);
     table
         .verify(
             &settings,
@@ -87,11 +83,8 @@ fn test_air_prove_with_preprocessed() {
         witness,
     );
 
-    let mut verifier_state = VerifierState::new(
-        &domainsep,
-        prover_state.proof_data().to_vec(),
-        challenger,
-    );
+    let mut verifier_state =
+        VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger);
     table
         .verify(
             &settings,
@@ -113,13 +106,8 @@ fn test_air_prove_different_univariate_skips() {
             continue; // Skip invalid cases
         }
 
-        let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(
-            &keccak_air::KeccakAir {},
-            0,
-            0,
-            0,
-            0,
-        );
+        let constraint_degree =
+            get_max_constraint_degree_extension::<F, EF, _>(&keccak_air::KeccakAir {}, 0, 0, 0, 0);
         let table = AirTable::<F, EF, _>::new(
             keccak_air::KeccakAir {},
             log_length,
@@ -152,11 +140,8 @@ fn test_air_prove_different_univariate_skips() {
             witness.clone(),
         );
 
-        let mut verifier_state = VerifierState::new(
-            &domainsep,
-            prover_state.proof_data().to_vec(),
-            challenger,
-        );
+        let mut verifier_state =
+            VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger);
         table
             .verify(
                 &settings,
@@ -173,8 +158,7 @@ fn test_air_prove_different_univariate_skips() {
 #[test]
 fn test_air_prove_different_settings() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
-    let constraint_degree =
-        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
     let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let merkle_hash = setup_merkle_hash();
@@ -209,11 +193,8 @@ fn test_air_prove_different_settings() {
             witness.clone(),
         );
 
-        let mut verifier_state = VerifierState::new(
-            &domainsep,
-            prover_state.proof_data().to_vec(),
-            challenger,
-        );
+        let mut verifier_state =
+            VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger);
         table
             .verify(
                 &settings,
@@ -265,8 +246,7 @@ fn test_air_prove_witness_dimension_mismatch() {
 fn test_air_prove_larger_table() {
     let (air, log_length, witness) = create_keccak_witness_columns(2, 0);
     // Keep univariate_skips=1; skips>1 currently triggers UB in whir-p3.
-    let constraint_degree =
-        get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
+    let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
     let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree);
 
     let settings = create_test_settings();
@@ -291,11 +271,8 @@ fn test_air_prove_larger_table() {
         witness,
     );
 
-    let mut verifier_state = VerifierState::new(
-        &domainsep,
-        prover_state.proof_data().to_vec(),
-        challenger,
-    );
+    let mut verifier_state =
+        VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger);
     table
         .verify(
             &settings,

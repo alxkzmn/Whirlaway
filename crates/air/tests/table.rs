@@ -1,6 +1,6 @@
 use air::{AirSettings, table::AirTable};
 use air_test_utils::{
-    F, EF, MockAir, MyChallenger, create_preprocessed_columns, setup_merkle_compress,
+    EF, F, MockAir, MyChallenger, create_preprocessed_columns, setup_merkle_compress,
     setup_merkle_hash,
 };
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
