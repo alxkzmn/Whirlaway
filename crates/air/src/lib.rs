@@ -43,3 +43,16 @@ impl AirSettings {
         }
     }
 }
+
+impl Default for AirSettings {
+    fn default() -> Self {
+        Self {
+            security_bits: 128,
+            whir_soudness_type: SecurityAssumption::CapacityBound,
+            whir_folding_factor: FoldingFactor::ConstantFromSecondRound(7, 4),
+            whir_log_inv_rate: 1,
+            univariate_skips: 4,
+            whir_initial_domain_reduction_factor: 5,
+        }
+    }
+}
