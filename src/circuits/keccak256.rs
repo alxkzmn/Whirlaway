@@ -25,17 +25,6 @@ pub type MerkleCompress = KeccakNodeCompress;
 
 pub type Challenger = SerializingChallenger32<F, HashChallenger<u8, Keccak256Hash, 32>>;
 
-pub fn default_settings() -> AirSettings {
-    AirSettings::new(
-        128,
-        SecurityAssumption::CapacityBound,
-        FoldingFactor::ConstantFromSecondRound(7, 4),
-        1,
-        4,
-        5,
-    )
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Keccak256Preprocessed {
     pub input_size: usize,
@@ -80,7 +69,7 @@ fn make_table(log_length: usize, settings: &AirSettings) -> AirTable<F, EF, Kecc
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Keccak256Circuit {
-    input_size: usize,
+    pub input_size: usize,
 }
 
 impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
