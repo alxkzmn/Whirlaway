@@ -49,7 +49,7 @@ fn bench(c: &mut Criterion) {
                         .map(|_| std::array::from_fn(|_| rng.random()))
                         .collect();
 
-                    let _proof = prove(&prepared, &proving_settings, &inputs);
+                    let _proof = prove(&prepared, &inputs);
                 });
             },
         );
@@ -70,10 +70,10 @@ fn bench(c: &mut Criterion) {
                 let inputs: Vec<[u64; 25]> = (0..n_rows)
                     .map(|_| std::array::from_fn(|_| rng.random()))
                     .collect();
-                prove(&prepared, &proving_settings, &inputs)
+                prove(&prepared, &inputs)
             },
             |proof| {
-                verify(&prepared, &proving_settings, &proof).unwrap();
+                verify(&prepared, &proof).unwrap();
             },
             criterion::BatchSize::SmallInput,
         );
