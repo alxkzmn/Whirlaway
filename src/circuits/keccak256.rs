@@ -11,7 +11,6 @@ use p3_koala_bear::KoalaBear;
 use p3_matrix::Matrix;
 use p3_matrix::dense::RowMajorMatrix;
 use serde::{Deserialize, Serialize};
-use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 use whir_p3::poly::evals::EvaluationsList;
 
 use crate::hashers::{KECCAK_DIGEST_ELEMS, KeccakNodeCompress, KeccakU32BeLeafHasher};

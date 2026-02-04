@@ -56,7 +56,7 @@ fn bench(c: &mut Criterion) {
                         .map(|_| std::array::from_fn(|_| rng.random()))
                         .collect();
 
-                    let _proof = prove(&prepared, &proving_settings, &inputs);
+                    let _proof = prove(&prepared, &inputs);
                 });
             },
         );
@@ -73,11 +73,11 @@ fn bench(c: &mut Criterion) {
     let inputs: Vec<[F; WIDTH]> = (0..n_rows)
         .map(|_| std::array::from_fn(|_| rng.random()))
         .collect();
-    let proof = prove(&prepared, &proving_settings, &inputs);
+    let proof = prove(&prepared, &inputs);
 
     group.bench_function("verify", |b| {
         b.iter(|| {
-            let _ = verify(&prepared, &proving_settings, &proof);
+            let _ = verify(&prepared, &proof);
         });
     });
 }

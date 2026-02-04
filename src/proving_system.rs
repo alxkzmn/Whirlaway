@@ -110,11 +110,12 @@ pub trait Circuit<const DIGEST_ELEMS: usize> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Prepared<C, const DIGEST_ELEMS: usize>
+pub struct Prepared<C, S, const DIGEST_ELEMS: usize>
 where
     C: Circuit<DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
 {
-    pub settings: AirSettings,
+    pub settings: S,
     pub circuit: C::Preprocessed,
     pub domain_separator: DomainSeparator<C::EF, C::F>,
 }
@@ -131,10 +132,10 @@ where
 pub fn prepare<C, S, const DIGEST_ELEMS: usize>(
     settings: &S,
     circuit: C,
-) -> Prepared<C, DIGEST_ELEMS>
+) -> Prepared<C, S, DIGEST_ELEMS>
 where
     C: Circuit<DIGEST_ELEMS>,
-    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, DIGEST_ELEMS> + Clone,
     C::F: serde::Serialize + for<'de> serde::Deserialize<'de>,
     C::EF: serde::Serialize + for<'de> serde::Deserialize<'de>,
 {
@@ -158,15 +159,14 @@ where
         );
 
     Prepared {
-        settings: settings.air_settings().clone(),
+        settings: settings.clone(),
         circuit: preprocessed_circuit,
         domain_separator,
     }
 }
 
 pub fn prove<C, S, const DIGEST_ELEMS: usize>(
-    prepared: &Prepared<C, DIGEST_ELEMS>,
-    settings: &S,
+    prepared: &Prepared<C, S, DIGEST_ELEMS>,
     input: &C::Input,
 ) -> Proof<C, DIGEST_ELEMS>
 where
@@ -179,16 +179,16 @@ where
     <C::F as p3_field::Field>::Packing: Eq + Send + Sync,
 {
     let witness = C::build_witness(&prepared.circuit, input);
-    let table = C::make_table(&prepared.circuit, &prepared.settings);
+    let table = C::make_table(&prepared.circuit, prepared.settings.air_settings());
 
-    let challenger = settings.new_challenger();
+    let challenger = &prepared.settings.new_challenger();
     let mut prover_state = ProverState::new(&prepared.domain_separator, challenger.clone());
 
     let whir_proof = table
         .prove::<S::MerkleHash, S::MerkleCompress, S::Challenger, C::W, DIGEST_ELEMS>(
-            &prepared.settings,
-            settings.merkle_hash(),
-            settings.merkle_compress(),
+            prepared.settings.air_settings(),
+            prepared.settings.merkle_hash(),
+            prepared.settings.merkle_compress(),
             &mut prover_state,
             witness,
         );
@@ -200,8 +200,7 @@ where
 }
 
 pub fn verify<C, S, const DIGEST_ELEMS: usize>(
-    prepared: &Prepared<C, DIGEST_ELEMS>,
-    settings: &S,
+    prepared: &Prepared<C, S, DIGEST_ELEMS>,
     proof: &Proof<C, DIGEST_ELEMS>,
 ) -> Result<(), String>
 where
@@ -212,9 +211,9 @@ where
     [C::W; DIGEST_ELEMS]: serde::Serialize + for<'de> serde::Deserialize<'de>,
     <C::F as p3_field::Field>::Packing: Eq + Send + Sync,
 {
-    let table = C::make_table(&prepared.circuit, &prepared.settings);
+    let table = C::make_table(&prepared.circuit, prepared.settings.air_settings());
 
-    let challenger = settings.new_challenger();
+    let challenger = prepared.settings.new_challenger();
     let mut verifier_state = VerifierState::new(
         &prepared.domain_separator,
         proof.proof_data.clone(),
@@ -223,9 +222,9 @@ where
 
     table
         .verify::<S::MerkleHash, S::MerkleCompress, S::Challenger, C::W, DIGEST_ELEMS>(
-            &prepared.settings,
-            settings.merkle_hash(),
-            settings.merkle_compress(),
+            prepared.settings.air_settings(),
+            prepared.settings.merkle_hash(),
+            prepared.settings.merkle_compress(),
             &mut verifier_state,
             table.log_length,
             &proof.whir_proof,
@@ -233,14 +232,15 @@ where
         .map_err(|e| format!("verify failed: {e:?}"))
 }
 
-pub fn preprocessing_size<C, const DIGEST_ELEMS: usize>(
-    prepared: &Prepared<C, DIGEST_ELEMS>,
+pub fn preprocessing_size<C, S, const DIGEST_ELEMS: usize>(
+    prepared: &Prepared<C, S, DIGEST_ELEMS>,
 ) -> usize
 where
     C: Circuit<DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
     C::Preprocessed: serde::Serialize,
 {
-    bincode::serialize(&(prepared.settings.clone(), &prepared.circuit))
+    bincode::serialize(&(prepared.settings.air_settings().clone(), &prepared.circuit))
         .map(|v| v.len())
         .unwrap_or(0)
 }
@@ -262,10 +262,13 @@ where
     proof_data_bytes + whir_bytes
 }
 
-pub fn num_constraints<C, const DIGEST_ELEMS: usize>(prepared: &Prepared<C, DIGEST_ELEMS>) -> usize
+pub fn num_constraints<C, S, const DIGEST_ELEMS: usize>(
+    prepared: &Prepared<C, S, DIGEST_ELEMS>,
+) -> usize
 where
     C: Circuit<DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
 {
-    let table = C::make_table(&prepared.circuit, &prepared.settings);
+    let table = C::make_table(&prepared.circuit, prepared.settings.air_settings());
     table.n_constraints
 }

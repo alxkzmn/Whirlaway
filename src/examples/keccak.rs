@@ -97,7 +97,7 @@ pub fn prove_keccak(
 
     let prepared =
         prepare::<KeccakAirCircuit, _, KECCAK_DIGEST_ELEMS>(&proving_settings, keccak_air_circuit);
-    let proof = prove(&prepared, &proving_settings, &inputs);
+    let proof = prove(&prepared, &inputs);
 
     let prover_time = t.elapsed();
     let verify_enabled = std::env::var("VERIFY")
@@ -106,7 +106,7 @@ pub fn prove_keccak(
     let mut verifier_time = Duration::ZERO;
     if verify_enabled {
         let time = Instant::now();
-        verify(&prepared, &proving_settings, &proof).unwrap();
+        verify(&prepared, &proof).unwrap();
         verifier_time = time.elapsed();
     }
 
