@@ -27,12 +27,8 @@ fn bench(c: &mut Criterion) {
     let merkle_hash = MerkleHash::default();
     let merkle_compress = MerkleCompress::default();
     let challenger = MyChallenger::from_hasher(Vec::new(), Keccak256Hash);
-    let proving_settings = ProvingSystemConfig::new(
-        settings.clone(),
-        merkle_hash,
-        merkle_compress,
-        challenger,
-    );
+    let proving_settings =
+        ProvingSystemConfig::new(settings.clone(), merkle_hash, merkle_compress, challenger);
 
     // Benchmark different trace sizes
     for log_n_rows in [5, 6, 7, 8] {
@@ -41,8 +37,11 @@ fn bench(c: &mut Criterion) {
             &log_n_rows,
             |b, log_n_rows| {
                 let n_rows = 1 << log_n_rows;
-                let prepared =
-                    prepare::<KeccakAirCircuit, _, KECCAK_DIGEST_ELEMS>(n_rows, &proving_settings);
+                let keccak_air_circuit = KeccakAirCircuit { n_inputs: n_rows };
+                let prepared = prepare::<KeccakAirCircuit, _, KECCAK_DIGEST_ELEMS>(
+                    &proving_settings,
+                    keccak_air_circuit,
+                );
 
                 b.iter(|| {
                     // The witness generation is included because ProveKit doesn't separate witness generation and proving.
@@ -60,8 +59,11 @@ fn bench(c: &mut Criterion) {
 
     group.bench_function("verify", |b| {
         let n_rows = 1 << log_length;
-        let prepared =
-            prepare::<KeccakAirCircuit, _, KECCAK_DIGEST_ELEMS>(n_rows, &proving_settings);
+        let keccak_air_circuit = KeccakAirCircuit { n_inputs: n_rows };
+        let prepared = prepare::<KeccakAirCircuit, _, KECCAK_DIGEST_ELEMS>(
+            &proving_settings,
+            keccak_air_circuit,
+        );
 
         b.iter_batched(
             || {

@@ -5,8 +5,8 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 use whir_p3::{parameters::FoldingFactor, parameters::errors::SecurityAssumption};
 
 use whirlaway::circuits::poseidon2::{
-    Challenger as MyChallenger, MerkleCompress, MerkleHash, Poseidon16, Poseidon24,
-    Poseidon2Circuit, Poseidon2Params, F, HALF_FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH,
+    Challenger as MyChallenger, F, HALF_FULL_ROUNDS, MerkleCompress, MerkleHash, PARTIAL_ROUNDS,
+    Poseidon2Circuit, Poseidon16, Poseidon24, WIDTH,
 };
 use whirlaway::proving_system::{ProvingSystemConfig, prepare, prove, verify};
 
@@ -33,12 +33,8 @@ fn bench(c: &mut Criterion) {
     let merkle_hash = MerkleHash::new(poseidon24);
     let merkle_compress = MerkleCompress::new(poseidon16.clone());
     let challenger = MyChallenger::new(poseidon16);
-    let proving_settings = ProvingSystemConfig::new(
-        settings.clone(),
-        merkle_hash,
-        merkle_compress,
-        challenger,
-    );
+    let proving_settings =
+        ProvingSystemConfig::new(settings.clone(), merkle_hash, merkle_compress, challenger);
 
     // Benchmark different trace sizes
     for log_n_rows in [6, 7, 8, 9] {
@@ -46,11 +42,11 @@ fn bench(c: &mut Criterion) {
             BenchmarkId::from_parameter(log_n_rows),
             &log_n_rows,
             |b, log_n_rows| {
-                let params = Poseidon2Params {
+                let circuit = Poseidon2Circuit {
                     log_length: *log_n_rows,
                     constants: constants.clone(),
                 };
-                let prepared = prepare::<Poseidon2Circuit, _, 8>(params, &proving_settings);
+                let prepared = prepare::<Poseidon2Circuit, _, 8>(&proving_settings, circuit);
 
                 b.iter(|| {
                     // The witness generation is included because ProveKit doesn't separate witness generation and proving.
@@ -68,11 +64,11 @@ fn bench(c: &mut Criterion) {
 
     // Also benchmark verification
     let log_n_rows = 7; // Use smaller size for verification benchmark
-    let params = Poseidon2Params {
+    let circuit = Poseidon2Circuit {
         log_length: log_n_rows,
         constants: constants.clone(),
     };
-    let prepared = prepare::<Poseidon2Circuit, _, 8>(params, &proving_settings);
+    let prepared = prepare::<Poseidon2Circuit, _, 8>(&proving_settings, circuit);
     let n_rows = 1 << log_n_rows;
     let inputs: Vec<[F; WIDTH]> = (0..n_rows)
         .map(|_| std::array::from_fn(|_| rng.random()))

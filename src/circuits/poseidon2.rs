@@ -38,13 +38,10 @@ pub struct Poseidon2Preprocessed {
 }
 
 #[derive(Clone, Debug)]
-pub struct Poseidon2Params {
+pub struct Poseidon2Circuit {
     pub log_length: usize,
     pub constants: RoundConstants<F, WIDTH, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>,
 }
-
-#[derive(Clone, Debug)]
-pub struct Poseidon2Circuit;
 
 impl Circuit<8> for Poseidon2Circuit {
     type F = F;
@@ -61,14 +58,13 @@ impl Circuit<8> for Poseidon2Circuit {
 
     type W = F;
 
-    type Params = Poseidon2Params;
     type Preprocessed = Poseidon2Preprocessed;
     type Input = Vec<[F; WIDTH]>;
 
-    fn preprocess(params: &Self::Params, _settings: &AirSettings) -> Self::Preprocessed {
+    fn preprocess(&self, _settings: &AirSettings) -> Self::Preprocessed {
         Self::Preprocessed {
-            log_length: params.log_length,
-            constants: params.constants.clone(),
+            log_length: self.log_length,
+            constants: self.constants.clone(),
         }
     }
 

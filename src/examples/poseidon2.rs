@@ -9,8 +9,8 @@ use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::Subscr
 use whir_p3::parameters::FoldingFactor;
 
 use crate::circuits::poseidon2::{
-    Challenger as MyChallenger, MerkleCompress, MerkleHash, Poseidon16, Poseidon24,
-    Poseidon2Circuit, Poseidon2Params, F, HALF_FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH,
+    Challenger as MyChallenger, F, HALF_FULL_ROUNDS, MerkleCompress, MerkleHash, PARTIAL_ROUNDS,
+    Poseidon2Circuit, Poseidon16, Poseidon24, WIDTH,
 };
 use crate::proving_system::{ProvingSystemConfig, prepare, proof_size, prove, verify};
 
@@ -78,26 +78,21 @@ pub fn prove_poseidon2(
         .map(|_| std::array::from_fn(|_| rng.random()))
         .collect();
 
-
     let poseidon16 = Poseidon16::new_from_rng_128(&mut rng);
     let poseidon24 = Poseidon24::new_from_rng_128(&mut rng);
     let merkle_hash = MerkleHash::new(poseidon24);
     let merkle_compress = MerkleCompress::new(poseidon16.clone());
     let challenger = MyChallenger::new(poseidon16);
-    let proving_settings = ProvingSystemConfig::new(
-        settings.clone(),
-        merkle_hash,
-        merkle_compress,
-        challenger,
-    );
+    let proving_settings =
+        ProvingSystemConfig::new(settings.clone(), merkle_hash, merkle_compress, challenger);
 
     let t = Instant::now();
 
-    let params = Poseidon2Params {
+    let poseidon_circuit = Poseidon2Circuit {
         log_length: log_n_rows,
         constants,
     };
-    let prepared = prepare::<Poseidon2Circuit, _, 8>(params, &proving_settings);
+    let prepared = prepare::<Poseidon2Circuit, _, 8>(&proving_settings, poseidon_circuit);
     let proof = prove(&prepared, &proving_settings, &inputs);
 
     let prover_time = t.elapsed();
