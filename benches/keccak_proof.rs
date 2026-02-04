@@ -1,11 +1,14 @@
 use air::AirSettings;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use p3_keccak::Keccak256Hash;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use whir_p3::{parameters::FoldingFactor, parameters::errors::SecurityAssumption};
 
-use whirlaway::circuits::keccak_air::KeccakAirCircuit;
+use whirlaway::circuits::keccak_air::{
+    Challenger as MyChallenger, KeccakAirCircuit, MerkleCompress, MerkleHash,
+};
 use whirlaway::hashers::KECCAK_DIGEST_ELEMS;
-use whirlaway::proving_system::{KeccakProvingSystemConfig, prepare, prove, verify};
+use whirlaway::proving_system::{ProvingSystemConfig, prepare, prove, verify};
 
 fn bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("whirlaway_keccak_proof");
@@ -21,9 +24,11 @@ fn bench(c: &mut Criterion) {
     );
 
     let mut rng = StdRng::seed_from_u64(0);
-    let proving_settings = KeccakProvingSystemConfig {
-        air_settings: settings.clone(),
-    };
+    let merkle_hash = MerkleHash::default();
+    let merkle_compress = MerkleCompress::default();
+    let challenger = MyChallenger::from_hasher(Vec::new(), Keccak256Hash);
+    let proving_settings =
+        ProvingSystemConfig::new(settings.clone(), merkle_hash, merkle_compress, challenger);
 
     // Benchmark different trace sizes
     for log_n_rows in [5, 6, 7, 8] {

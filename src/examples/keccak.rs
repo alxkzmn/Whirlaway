@@ -7,7 +7,7 @@ use tracing_forest::ForestLayer;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 use whir_p3::parameters::FoldingFactor;
 
-use crate::circuits::keccak_air::KeccakAirCircuit;
+use crate::circuits::keccak256::Keccak256Circuit;
 use crate::hashers::KECCAK_DIGEST_ELEMS;
 use crate::proving_system::{KeccakProvingSystemConfig, prepare, proof_size, prove, verify};
 
@@ -23,6 +23,7 @@ use crate::proving_system::{KeccakProvingSystemConfig, prepare, proof_size, prov
 #[derive(Clone, Debug)]
 pub struct KeccakBenchmark {
     pub log_n_rows: usize,
+    pub message_len: usize,
     pub settings: AirSettings,
     pub prover_time: Duration,
     pub verifier_time: Duration,
@@ -46,14 +47,39 @@ impl fmt::Display for KeccakBenchmark {
         let n_rows = 1 << self.log_n_rows;
         writeln!(
             f,
-            "Proved {} keccak hashes in {:.3} s ({} / s)",
+            "Proved Keccak-256 message ({} bytes, {} rows) in {:.3} s",
+            self.message_len,
             n_rows,
-            self.prover_time.as_millis() as f64 / 1000.0,
-            (n_rows as f64 / self.prover_time.as_secs_f64()).round() as usize
+            self.prover_time.as_millis() as f64 / 1000.0
         )?;
         writeln!(f, "Proof size: {:.1} KiB", self.proof_size / 1024.0)?;
         writeln!(f, "Verification: {} ms", self.verifier_time.as_millis())
     }
+}
+
+fn message_len_for_log_length(log_n_rows: usize) -> (usize, usize) {
+    use keccak_air::{NUM_ROUNDS, RATE_BYTES};
+
+    let target_rows = 1usize << log_n_rows;
+    let mut num_blocks_max = target_rows / NUM_ROUNDS;
+    if num_blocks_max == 0 {
+        num_blocks_max = 1;
+    }
+
+    let min_rows = (target_rows / 2).saturating_add(1);
+    let num_blocks_min = min_rows.div_ceil(NUM_ROUNDS);
+
+    let num_blocks = if num_blocks_max * NUM_ROUNDS <= target_rows / 2 {
+        num_blocks_min.max(1)
+    } else {
+        num_blocks_max
+    };
+
+    let rows = num_blocks * NUM_ROUNDS;
+    let actual_log_n_rows = rows.next_power_of_two().ilog2() as usize;
+    let message_len = num_blocks * RATE_BYTES - 2;
+
+    (message_len, actual_log_n_rows)
 }
 
 pub fn prove_keccak(
@@ -74,13 +100,11 @@ pub fn prove_keccak(
             .init();
     }
 
-    let n_rows = 1 << log_n_rows;
+    let (message_len, actual_log_n_rows) = message_len_for_log_length(log_n_rows);
 
     let mut rng = StdRng::seed_from_u64(0);
 
-    let inputs: Vec<[u64; 25]> = (0..n_rows)
-        .map(|_| std::array::from_fn(|_| rng.random()))
-        .collect();
+    let inputs: Vec<u8> = (0..message_len).map(|_| rng.random()).collect();
 
     let proving_settings = KeccakProvingSystemConfig {
         air_settings: settings.clone(),
@@ -88,10 +112,12 @@ pub fn prove_keccak(
 
     let t = Instant::now();
 
-    let keccak_air_circuit = KeccakAirCircuit { n_inputs: n_rows };
+    let keccak_air_circuit = Keccak256Circuit {
+        input_size: message_len,
+    };
 
     let prepared =
-        prepare::<KeccakAirCircuit, _, KECCAK_DIGEST_ELEMS>(&proving_settings, keccak_air_circuit);
+        prepare::<Keccak256Circuit, _, KECCAK_DIGEST_ELEMS>(&proving_settings, keccak_air_circuit);
     let proof = prove(&prepared, &inputs);
 
     let prover_time = t.elapsed();
@@ -105,12 +131,13 @@ pub fn prove_keccak(
         verifier_time = time.elapsed();
     }
 
-    let proof_size = proof_size::<KeccakAirCircuit, KECCAK_DIGEST_ELEMS>(&proof) as f64;
+    let proof_size = proof_size::<Keccak256Circuit, KECCAK_DIGEST_ELEMS>(&proof) as f64;
 
     // TODO(onchain): Serialize Keccak digests to bytes32 at the I/O boundary.
 
     KeccakBenchmark {
-        log_n_rows,
+        log_n_rows: actual_log_n_rows,
+        message_len,
         settings,
         prover_time,
         verifier_time,

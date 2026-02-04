@@ -93,13 +93,13 @@ pub struct KeccakProvingSystemConfig {
     pub air_settings: AirSettings,
 }
 
-impl ProvingSystemSettings<crate::circuits::keccak_air::KeccakAirCircuit, KECCAK_DIGEST_ELEMS>
+impl ProvingSystemSettings<crate::circuits::keccak256::Keccak256Circuit, KECCAK_DIGEST_ELEMS>
     for KeccakProvingSystemConfig
 {
     type MerkleHash = KeccakU32BeLeafHasher;
     type MerkleCompress = KeccakNodeCompress;
     type Challenger = SerializingChallenger32<
-        crate::circuits::keccak_air::F,
+        crate::circuits::keccak256::F,
         HashChallenger<u8, Keccak256Hash, 32>,
     >;
 
