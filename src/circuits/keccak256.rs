@@ -88,10 +88,6 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
 
     type W = u64;
 
-    type MerkleHash = MerkleHash;
-    type MerkleCompress = MerkleCompress;
-    type Challenger = Challenger;
-
     type Params = usize; // message length in bytes
     type Preprocessed = Keccak256Preprocessed;
     type Input = Vec<u8>; // message bytes
@@ -126,10 +122,6 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
             .rows()
             .map(|col| EvaluationsList::new(col.collect()))
             .collect()
-    }
-
-    fn new_challenger() -> Self::Challenger {
-        Self::Challenger::from_hasher(Vec::new(), Keccak256Hash)
     }
 }
 

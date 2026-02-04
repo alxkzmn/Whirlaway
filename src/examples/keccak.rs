@@ -1,7 +1,4 @@
 use air::AirSettings;
-use air::table::AirTable;
-use keccak_air::{KeccakAir, generate_trace_rows};
-use p3_field::PrimeField64;
 use p3_keccak::Keccak256Hash;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::fmt;
@@ -9,13 +6,13 @@ use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing_forest::ForestLayer;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
-use utils::{ProverState, VerifierState};
-use whir_p3::fiat_shamir::domain_separator::DomainSeparator;
 use whir_p3::parameters::FoldingFactor;
-use whir_p3::whir::parameters::WhirConfig;
 
-use crate::circuits::keccak256::{Challenger as MyChallenger, EF, F, MerkleCompress, MerkleHash};
+use crate::circuits::keccak_air::{
+    Challenger as MyChallenger, KeccakAirCircuit, MerkleCompress, MerkleHash,
+};
 use crate::hashers::KECCAK_DIGEST_ELEMS;
+use crate::proving_system::{ProvingSystemConfig, prepare, proof_size, prove, verify};
 
 // BabyBear
 // type F = BabyBear;
@@ -68,6 +65,7 @@ pub fn prove_keccak(
     n_preprocessed_columns: usize,
     display_logs: bool,
 ) -> KeccakBenchmark {
+    let _ = n_preprocessed_columns;
     if display_logs {
         let env_filter = EnvFilter::builder()
             .with_default_directive(LevelFilter::INFO.into())
@@ -83,59 +81,24 @@ pub fn prove_keccak(
 
     let mut rng = StdRng::seed_from_u64(0);
 
-    let keccak_air = KeccakAir {};
-
     let inputs: Vec<[u64; 25]> = (0..n_rows)
         .map(|_| std::array::from_fn(|_| rng.random()))
         .collect();
 
-    let witness_matrix = generate_trace_rows(inputs, 0);
-
-    let width = witness_matrix.width;
-    let height = witness_matrix.values.len() / width;
-    let log_length = height.ilog2() as usize;
-    let mut witness = (0..width)
-        .map(|col| {
-            let values = (0..height)
-                .map(|row| witness_matrix.values[row * width + col])
-                .collect::<Vec<_>>();
-            whir_p3::poly::evals::EvaluationsList::new(values)
-        })
-        .collect::<Vec<_>>();
-
-    let preprocessed_columns = witness.drain(..n_preprocessed_columns).collect::<Vec<_>>();
-
-    let table = AirTable::<F, EF, _>::new(
-        keccak_air,
-        log_length,
-        settings.univariate_skips,
-        preprocessed_columns,
-        3,
-    );
-
     let merkle_hash = MerkleHash::default();
     let merkle_compress = MerkleCompress::default();
+    let challenger = MyChallenger::from_hasher(Vec::new(), Keccak256Hash);
+    let proving_settings = ProvingSystemConfig::new(
+        settings.clone(),
+        merkle_hash,
+        merkle_compress,
+        challenger,
+    );
 
     let t = Instant::now();
 
-    let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
-        table.build_whir_params(&settings, merkle_hash, merkle_compress);
-    let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
-    domainsep.commit_statement::<_, _, _, { KECCAK_DIGEST_ELEMS }>(&whir_params);
-    domainsep.add_whir_proof::<_, _, _, { KECCAK_DIGEST_ELEMS }>(&whir_params);
-
-    let challenger = MyChallenger::from_hasher(Vec::new(), Keccak256Hash);
-
-    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
-
-    let whir_proof = table.prove(
-        &settings,
-        merkle_hash,
-        merkle_compress,
-        &mut prover_state,
-        witness,
-    );
-    // let proof_size = prover_state.narg_string().len();
+    let prepared = prepare::<KeccakAirCircuit, _, KECCAK_DIGEST_ELEMS>(n_rows, &proving_settings);
+    let proof = prove(&prepared, &proving_settings, &inputs);
 
     let prover_time = t.elapsed();
     let verify_enabled = std::env::var("VERIFY")
@@ -144,22 +107,11 @@ pub fn prove_keccak(
     let mut verifier_time = Duration::ZERO;
     if verify_enabled {
         let time = Instant::now();
-        let mut verifier_state =
-            VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger);
-        table
-            .verify(
-                &settings,
-                merkle_hash,
-                merkle_compress,
-                &mut verifier_state,
-                log_length,
-                &whir_proof,
-            )
-            .unwrap();
+        verify(&prepared, &proving_settings, &proof).unwrap();
         verifier_time = time.elapsed();
     }
 
-    let proof_size = prover_state.proof_data().len() as f64 * (F::ORDER_U64 as f64).log2() / 8.0;
+    let proof_size = proof_size::<KeccakAirCircuit, KECCAK_DIGEST_ELEMS>(&proof) as f64;
 
     // TODO(onchain): Serialize Keccak digests to bytes32 at the I/O boundary.
 

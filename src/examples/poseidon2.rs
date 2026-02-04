@@ -1,50 +1,18 @@
 use ::air::AirSettings;
-use air::table::AirTable;
-use p3_challenger::DuplexChallenger;
-use p3_field::PrimeField64;
-use p3_field::extension::BinomialExtensionField;
-use p3_koala_bear::{GenericPoseidon2LinearLayersKoalaBear, KoalaBear, Poseidon2KoalaBear};
-use p3_poseidon2_air::{Poseidon2Air, RoundConstants, generate_trace_rows};
-use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
+use p3_poseidon2_air::RoundConstants;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::fmt;
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;
 use tracing_forest::ForestLayer;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
-use utils::{ProverState, VerifierState};
-use whir_p3::{
-    fiat_shamir::domain_separator::DomainSeparator, parameters::FoldingFactor,
-    whir::parameters::WhirConfig,
+use whir_p3::parameters::FoldingFactor;
+
+use crate::circuits::poseidon2::{
+    Challenger as MyChallenger, MerkleCompress, MerkleHash, Poseidon16, Poseidon24,
+    Poseidon2Circuit, Poseidon2Params, F, HALF_FULL_ROUNDS, PARTIAL_ROUNDS, WIDTH,
 };
-
-// Koalabear
-type Poseidon16 = Poseidon2KoalaBear<16>;
-type Poseidon24 = Poseidon2KoalaBear<24>;
-
-type MerkleHash = PaddingFreeSponge<Poseidon24, 24, 16, 8>; // leaf hashing
-type MerkleCompress = TruncatedPermutation<Poseidon16, 2, 8, 16>; // 2-to-1 compression
-type MyChallenger = DuplexChallenger<F, Poseidon16, 16, 8>;
-
-// Koalabear
-type F = KoalaBear;
-type EF = BinomialExtensionField<F, 8>;
-type LinearLayers = GenericPoseidon2LinearLayersKoalaBear;
-const SBOX_DEGREE: u64 = 5;
-const SBOX_REGISTERS: usize = 0;
-const HALF_FULL_ROUNDS: usize = 4;
-const PARTIAL_ROUNDS: usize = 20;
-
-// BabyBear
-// type F = BabyBear;
-// type EF = BinomialExtensionField<F, 4>;
-// type LinearLayers = GenericPoseidon2LinearLayersBabyBear;
-// const SBOX_DEGREE: u64 = 7;
-// const SBOX_REGISTERS: usize = 1;
-// const HALF_FULL_ROUNDS: usize = 4;
-// const PARTIAL_ROUNDS: usize = 13;
-
-const WIDTH: usize = 16;
+use crate::proving_system::{ProvingSystemConfig, prepare, proof_size, prove, verify};
 
 #[derive(Clone, Debug)]
 pub struct Poseidon2Benchmark {
@@ -88,6 +56,7 @@ pub fn prove_poseidon2(
     n_preprocessed_columns: usize,
     display_logs: bool,
 ) -> Poseidon2Benchmark {
+    let _ = n_preprocessed_columns;
     if display_logs {
         let env_filter = EnvFilter::builder()
             .with_default_directive(LevelFilter::INFO.into())
@@ -105,76 +74,31 @@ pub fn prove_poseidon2(
     let constants =
         RoundConstants::<F, WIDTH, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>::from_rng(&mut rng);
 
-    let poseidon_air = Poseidon2Air::<
-        F,
-        LinearLayers,
-        WIDTH,
-        SBOX_DEGREE,
-        SBOX_REGISTERS,
-        HALF_FULL_ROUNDS,
-        PARTIAL_ROUNDS,
-    >::new(constants.clone());
-
     let inputs: Vec<[F; WIDTH]> = (0..n_rows)
         .map(|_| std::array::from_fn(|_| rng.random()))
         .collect();
 
-    let witness_matrix = generate_trace_rows::<
-        F,
-        LinearLayers,
-        WIDTH,
-        SBOX_DEGREE,
-        SBOX_REGISTERS,
-        HALF_FULL_ROUNDS,
-        PARTIAL_ROUNDS,
-    >(inputs, &constants, 0);
-
-    let width = witness_matrix.width;
-    let height = witness_matrix.values.len() / width;
-    let mut witness = (0..width)
-        .map(|col| {
-            let values = (0..height)
-                .map(|row| witness_matrix.values[row * width + col])
-                .collect::<Vec<_>>();
-            whir_p3::poly::evals::EvaluationsList::new(values)
-        })
-        .collect::<Vec<_>>();
-
-    let preprocessed_columns = witness.drain(..n_preprocessed_columns).collect::<Vec<_>>();
-
-    let table = AirTable::<F, EF, _>::new(
-        poseidon_air,
-        log_n_rows,
-        settings.univariate_skips,
-        preprocessed_columns,
-        SBOX_DEGREE as usize,
-    );
 
     let poseidon16 = Poseidon16::new_from_rng_128(&mut rng);
     let poseidon24 = Poseidon24::new_from_rng_128(&mut rng);
     let merkle_hash = MerkleHash::new(poseidon24);
     let merkle_compress = MerkleCompress::new(poseidon16.clone());
+    let challenger = MyChallenger::new(poseidon16);
+    let proving_settings = ProvingSystemConfig::new(
+        settings.clone(),
+        merkle_hash,
+        merkle_compress,
+        challenger,
+    );
 
     let t = Instant::now();
 
-    let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
-        table.build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
-    let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
-    domainsep.commit_statement::<_, _, _, 8>(&whir_params);
-    domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
-
-    let challenger = MyChallenger::new(poseidon16);
-
-    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
-
-    let whir_proof = table.prove(
-        &settings,
-        merkle_hash.clone(),
-        merkle_compress.clone(),
-        &mut prover_state,
-        witness,
-    );
-    // let proof_size = prover_state.narg_string().len();
+    let params = Poseidon2Params {
+        log_length: log_n_rows,
+        constants,
+    };
+    let prepared = prepare::<Poseidon2Circuit, _, 8>(params, &proving_settings);
+    let proof = prove(&prepared, &proving_settings, &inputs);
 
     let prover_time = t.elapsed();
     let verify_enabled = std::env::var("VERIFY")
@@ -183,22 +107,11 @@ pub fn prove_poseidon2(
     let mut verifier_time = Duration::ZERO;
     if verify_enabled {
         let time = Instant::now();
-        let mut verifier_state =
-            VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger);
-        table
-            .verify(
-                &settings,
-                merkle_hash,
-                merkle_compress,
-                &mut verifier_state,
-                log_n_rows,
-                &whir_proof,
-            )
-            .unwrap();
+        verify(&prepared, &proving_settings, &proof).unwrap();
         verifier_time = time.elapsed();
     }
 
-    let proof_size = prover_state.proof_data().len() as f64 * (F::ORDER_U64 as f64).log2() / 8.0;
+    let proof_size = proof_size::<Poseidon2Circuit, 8>(&proof) as f64;
 
     Poseidon2Benchmark {
         log_n_rows,
