@@ -78,8 +78,8 @@ fn bench(c: &mut Criterion) {
                     let merkle_hash = MerkleHash::default();
                     let merkle_compress = MerkleCompress::default();
 
-                    let whir_params: WhirConfig<_, _, _, _, MyChallenger> = table
-                        .build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
+                    let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
+                        table.build_whir_params(&settings, merkle_hash, merkle_compress);
                     let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
                     domainsep.commit_statement::<_, _, _, KECCAK_DIGEST_ELEMS>(&whir_params);
                     domainsep.add_whir_proof::<_, _, _, KECCAK_DIGEST_ELEMS>(&whir_params);
@@ -90,8 +90,8 @@ fn bench(c: &mut Criterion) {
 
                     let _whir_proof = table.prove(
                         &settings,
-                        merkle_hash.clone(),
-                        merkle_compress.clone(),
+                        merkle_hash,
+                        merkle_compress,
                         &mut prover_state,
                         witness,
                     );
@@ -137,11 +137,8 @@ fn bench(c: &mut Criterion) {
                 let merkle_hash = MerkleHash::default();
                 let merkle_compress = MerkleCompress::default();
 
-                let whir_params: WhirConfig<_, _, _, _, MyChallenger> = table.build_whir_params(
-                    &settings,
-                    merkle_hash.clone(),
-                    merkle_compress.clone(),
-                );
+                let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
+                    table.build_whir_params(&settings, merkle_hash, merkle_compress);
                 let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
                 domainsep.commit_statement::<_, _, _, KECCAK_DIGEST_ELEMS>(&whir_params);
                 domainsep.add_whir_proof::<_, _, _, KECCAK_DIGEST_ELEMS>(&whir_params);
@@ -152,8 +149,8 @@ fn bench(c: &mut Criterion) {
 
                 let whir_proof = table.prove(
                     &settings,
-                    merkle_hash.clone(),
-                    merkle_compress.clone(),
+                    merkle_hash,
+                    merkle_compress,
                     &mut prover_state,
                     witness,
                 );
@@ -179,11 +176,8 @@ fn bench(c: &mut Criterion) {
                 merkle_compress,
                 log_length,
             )| {
-                let mut verifier_state = VerifierState::new(
-                    &domainsep,
-                    prover_state.proof_data().to_vec(),
-                    challenger,
-                );
+                let mut verifier_state =
+                    VerifierState::new(&domainsep, prover_state.proof_data().to_vec(), challenger);
                 table
                     .verify(
                         &settings,

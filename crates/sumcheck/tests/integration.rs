@@ -40,7 +40,7 @@ impl<F: p3_field::Field, EF: p3_field::ExtensionField<F>> sumcheck::SumcheckComp
             .map(|&x| {
                 let mut acc = EF::ZERO;
                 for i in 0..F::Packing::WIDTH {
-                    acc = acc + EF::from(x.as_slice()[i]);
+                    acc += EF::from(x.as_slice()[i]);
                 }
                 acc
             })

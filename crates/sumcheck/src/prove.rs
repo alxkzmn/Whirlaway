@@ -7,12 +7,10 @@ use rand::distr::{Distribution, StandardUniform};
 use rayon::prelude::*;
 use tracing::instrument;
 use utils::{
-    batch_fold_multilinear_in_large_field, batch_fold_multilinear_in_small_field,
-    univariate_selectors, DensePolynomial, ProverState,
+    DensePolynomial, ProverState, batch_fold_multilinear_in_large_field,
+    batch_fold_multilinear_in_small_field, univariate_selectors,
 };
-use whir_p3::{
-    poly::evals::EvaluationsList,
-};
+use whir_p3::poly::evals::EvaluationsList;
 
 use crate::{SumcheckComputation, SumcheckComputationPacked, SumcheckGrinding};
 
@@ -119,9 +117,8 @@ where
     StandardUniform: Distribution<EF>,
     Challenger: FieldChallenger<F> + GrindingChallenger<Witness = F>,
 {
-    let eq_mle = eq_factor.map(|eq_factor| {
-        EvaluationsList::new_from_point(&eq_factor[1 + round..], EF::ONE)
-    });
+    let eq_mle = eq_factor
+        .map(|eq_factor| EvaluationsList::new_from_point(&eq_factor[1 + round..], EF::ONE));
 
     let selectors: Vec<DensePolynomial<F>> = if skips == 1 {
         // In the case skips == 1, we do not need to compute the selectors, as they are S_0(x) = 1 - x and S_1(x) = x.
@@ -158,9 +155,7 @@ where
                 } else {
                     (*sum
                         - (0..(1 << skips) - 1)
-                            .map(|i| {
-                                p_evals[i].1 * selectors_ef[i].evaluate(eq_factor[round])
-                            })
+                            .map(|i| p_evals[i].1 * selectors_ef[i].evaluate(eq_factor[round]))
                             .sum::<EF>())
                         / selectors_ef[(1 << skips) - 1].evaluate(eq_factor[round])
                 }
@@ -219,7 +214,12 @@ where
             let selector_poly = DensePolynomial::lagrange_interpolation(
                 &(0..1 << skips)
                     .into_par_iter()
-                    .map(|i| (EF::from_usize(i), selectors_ef[i].evaluate(eq_factor[round])))
+                    .map(|i| {
+                        (
+                            EF::from_usize(i),
+                            selectors_ef[i].evaluate(eq_factor[round]),
+                        )
+                    })
                     .collect::<Vec<_>>(),
             )
             .unwrap();
@@ -291,39 +291,65 @@ where
     );
     let n_vars = pols[0].num_variables();
     if TypeId::of::<NF>() == TypeId::of::<F>() {
-        let pols: &[EvaluationsList<F>] = unsafe { std::mem::transmute(pols) };
-        let packed_pols = pols
-            .iter()
-            .map(|p| F::Packing::pack_slice(p.as_slice()))
-            .collect::<Vec<_>>();
+        let pols_nf: &[EvaluationsList<NF>] = pols;
+        let pols_f: &[EvaluationsList<F>] = unsafe { std::mem::transmute(pols_nf) };
 
-        let decomposed_batching_scalars: Vec<_> = (0..<EF as BasedVectorSpace<F>>::DIMENSION)
-            .map(|i| {
-                batching_scalars
-                    .iter()
-                    .map(|x| x.as_basis_coefficients_slice()[i])
-                    .collect()
-            })
-            .collect();
+        // Packing requires the evaluation slice length to be a multiple of the packed width.
+        // Some subcomputations can end up with a very small hypercube (e.g. 1 variable => 2 evals),
+        // which should fall back to scalar evaluation rather than panicking.
+        let evals_len = 1usize << n_vars;
+        if evals_len.is_multiple_of(F::Packing::WIDTH) {
+            let packed_pols = pols_f
+                .iter()
+                .map(|p| F::Packing::pack_slice(p.as_slice()))
+                .collect::<Vec<_>>();
 
-        (0..(1 << n_vars) / F::Packing::WIDTH)
-            .into_par_iter()
-            .enumerate()
-            .map(|(x, i)| {
-                let point = packed_pols.iter().map(|pol| pol[x]).collect::<Vec<_>>();
-                let res =
-                    computation.eval_packed(&point, batching_scalars, &decomposed_batching_scalars);
-                if let Some(eq_mle) = eq_mle {
-                    res.enumerate()
-                        .map(|(idx_in_packing, res)| {
-                            res * eq_mle.as_slice()[i * F::Packing::WIDTH + idx_in_packing]
-                        })
-                        .sum()
-                } else {
-                    res.sum()
-                }
-            })
-            .sum()
+            let decomposed_batching_scalars: Vec<_> = (0..<EF as BasedVectorSpace<F>>::DIMENSION)
+                .map(|i| {
+                    batching_scalars
+                        .iter()
+                        .map(|x| x.as_basis_coefficients_slice()[i])
+                        .collect()
+                })
+                .collect();
+
+            (0..(1 << n_vars) / F::Packing::WIDTH)
+                .into_par_iter()
+                .enumerate()
+                .map(|(x, i)| {
+                    let point = packed_pols.iter().map(|pol| pol[x]).collect::<Vec<_>>();
+                    let res = computation.eval_packed(
+                        &point,
+                        batching_scalars,
+                        &decomposed_batching_scalars,
+                    );
+                    if let Some(eq_mle) = eq_mle {
+                        res.enumerate()
+                            .map(|(idx_in_packing, res)| {
+                                res * eq_mle.as_slice()[i * F::Packing::WIDTH + idx_in_packing]
+                            })
+                            .sum()
+                    } else {
+                        res.sum()
+                    }
+                })
+                .sum()
+        } else {
+            (0..1 << n_vars)
+                .into_par_iter()
+                .map(|x| {
+                    let point = pols_nf
+                        .iter()
+                        .map(|pol| pol.as_slice()[x])
+                        .collect::<Vec<_>>();
+                    let mut res = computation.eval(&point, batching_scalars);
+                    if let Some(eq_mle) = eq_mle {
+                        res *= eq_mle.as_slice()[x];
+                    }
+                    res
+                })
+                .sum()
+        }
     } else {
         // TODO packing everywhere
         assert_eq!(TypeId::of::<NF>(), TypeId::of::<EF>());

@@ -17,7 +17,7 @@ use whir_p3::{
 
 type PF = <F as Field>::Packing;
 
-fn create_pcs_settings() -> AirSettings {
+const fn create_pcs_settings() -> AirSettings {
     AirSettings::new(
         128,
         SecurityAssumption::CapacityBound,
@@ -41,7 +41,7 @@ fn test_pcs_commitment_creation() {
     let merkle_compress = setup_merkle_compress();
 
     let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
-        table.build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
+        table.build_whir_params(&settings, merkle_hash, merkle_compress);
 
     let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
     domainsep.commit_statement::<_, _, _, 8>(&whir_params);
@@ -88,7 +88,7 @@ fn test_pcs_commitment_parsing() {
     let merkle_compress = setup_merkle_compress();
 
     let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
-        table.build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
+        table.build_whir_params(&settings, merkle_hash, merkle_compress);
 
     let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
     domainsep.commit_statement::<_, _, _, 8>(&whir_params);
@@ -141,7 +141,7 @@ fn test_pcs_opening_proof() {
     let merkle_compress = setup_merkle_compress();
 
     let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
-        table.build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
+        table.build_whir_params(&settings, merkle_hash, merkle_compress);
 
     let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
     domainsep.commit_statement::<_, _, _, 8>(&whir_params);
@@ -171,12 +171,13 @@ fn test_pcs_opening_proof() {
     let point: Vec<EF> = (0..num_vars)
         .map(|i| if i % 2 == 0 { EF::ZERO } else { EF::ONE })
         .collect();
+    let point = MultilinearPoint::new(point);
     let value = packed_witness
         .polynomial
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(point.clone()));
+        .evaluate_hypercube_base::<EF>(&point);
 
     let mut statement = EqStatement::<EF>::initialize(num_vars);
-    statement.add_evaluated_constraint(MultilinearPoint::new(point.clone()), value);
+    statement.add_evaluated_constraint(point, value);
 
     prover
         .prove::<_, PF, F, PF, 8>(
@@ -219,7 +220,7 @@ fn test_pcs_invalid_opening() {
     let merkle_compress = setup_merkle_compress();
 
     let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
-        table.build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
+        table.build_whir_params(&settings, merkle_hash, merkle_compress);
 
     let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
     domainsep.commit_statement::<_, _, _, 8>(&whir_params);
@@ -246,15 +247,17 @@ fn test_pcs_invalid_opening() {
     // Prove a correct opening...
     let prover = Prover(&whir_params);
     let num_vars = table.log_n_witness_columns() + log_length;
-    let point: Vec<EF> = (0..num_vars)
-        .map(|i| if i % 2 == 0 { EF::ONE } else { EF::ZERO })
-        .collect();
+    let point = MultilinearPoint::new(
+        (0..num_vars)
+            .map(|i| if i % 2 == 0 { EF::ONE } else { EF::ZERO })
+            .collect(),
+    );
     let correct_value = packed_witness
         .polynomial
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(point.clone()));
+        .evaluate_hypercube_base::<EF>(&point);
 
     let mut statement = EqStatement::<EF>::initialize(num_vars);
-    statement.add_evaluated_constraint(MultilinearPoint::new(point.clone()), correct_value);
+    statement.add_evaluated_constraint(point.clone(), correct_value);
 
     prover
         .prove::<_, PF, F, PF, 8>(
@@ -269,7 +272,7 @@ fn test_pcs_invalid_opening() {
     // ...but verify against a *wrong* value.
     let wrong_value = correct_value + EF::ONE;
     let mut wrong_statement = EqStatement::<EF>::initialize(num_vars);
-    wrong_statement.add_evaluated_constraint(MultilinearPoint::new(point.clone()), wrong_value);
+    wrong_statement.add_evaluated_constraint(point, wrong_value);
 
     let proof_data = prover_state.proof_data().to_vec();
     let mut verifier_state = VerifierState::new(&domainsep, proof_data, challenger);
@@ -303,7 +306,7 @@ fn test_pcs_multiple_evaluations() {
     let merkle_compress = setup_merkle_compress();
 
     let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
-        table.build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
+        table.build_whir_params(&settings, merkle_hash, merkle_compress);
 
     let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
     domainsep.commit_statement::<_, _, _, 8>(&whir_params);
@@ -330,22 +333,26 @@ fn test_pcs_multiple_evaluations() {
     // Create statement with multiple constraints, using correct evaluations.
     let prover = Prover(&whir_params);
     let num_vars = table.log_n_witness_columns() + log_length;
-    let point1: Vec<EF> = (0..num_vars)
-        .map(|i| if i % 2 == 0 { EF::ZERO } else { EF::ONE })
-        .collect();
-    let point2: Vec<EF> = (0..num_vars)
-        .map(|i| if i % 3 == 0 { EF::ONE } else { EF::ZERO })
-        .collect();
+    let point1 = MultilinearPoint::new(
+        (0..num_vars)
+            .map(|i| if i % 2 == 0 { EF::ZERO } else { EF::ONE })
+            .collect(),
+    );
+    let point2 = MultilinearPoint::new(
+        (0..num_vars)
+            .map(|i| if i % 3 == 0 { EF::ONE } else { EF::ZERO })
+            .collect(),
+    );
     let value1 = packed_witness
         .polynomial
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(point1.clone()));
+        .evaluate_hypercube_base::<EF>(&point1);
     let value2 = packed_witness
         .polynomial
-        .evaluate_hypercube_base::<EF>(&MultilinearPoint::new(point2.clone()));
+        .evaluate_hypercube_base::<EF>(&point2);
 
     let mut statement = EqStatement::<EF>::initialize(num_vars);
-    statement.add_evaluated_constraint(MultilinearPoint::new(point1.clone()), value1);
-    statement.add_evaluated_constraint(MultilinearPoint::new(point2.clone()), value2);
+    statement.add_evaluated_constraint(point1, value1);
+    statement.add_evaluated_constraint(point2, value2);
 
     prover
         .prove::<_, PF, F, PF, 8>(
@@ -387,7 +394,7 @@ fn test_pcs_different_polynomial_sizes() {
         let merkle_compress = setup_merkle_compress();
 
         let whir_params: WhirConfig<_, _, _, _, MyChallenger> =
-            table.build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
+            table.build_whir_params(&settings, merkle_hash, merkle_compress);
 
         let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
         domainsep.commit_statement::<_, _, _, 8>(&whir_params);

@@ -34,8 +34,8 @@ impl<AB: p3_air::AirBuilder<F = F>> Air<AB> for MockAir {
             .expect("Matrix should have at least one row")
             .into_iter()
             .collect();
-        for col in 0..self.width {
-            sum = sum + row[col].clone();
+        for value in row.iter().take(self.width) {
+            sum += value.clone();
         }
         builder.assert_zero(sum);
     }
@@ -49,7 +49,7 @@ impl BaseAir<F> for MockAir {
 
 // Implement required traits for prove/verify
 impl MockAir {
-    pub fn new(width: usize) -> Self {
+    pub const fn new(width: usize) -> Self {
         Self { width }
     }
 }
@@ -60,7 +60,7 @@ pub fn setup_challenger() -> MyChallenger {
     DuplexChallenger::new(poseidon)
 }
 
-pub fn create_test_settings() -> AirSettings {
+pub const fn create_test_settings() -> AirSettings {
     AirSettings::new(
         128, // security_bits
         SecurityAssumption::CapacityBound,
@@ -98,13 +98,13 @@ pub fn create_satisfying_columns(log_length: usize, n_columns: usize) -> Vec<Eva
     }
     let n_rows = 1 << log_length;
     let mut last_evals = cols[n_columns - 1].as_slice().to_vec();
-    for row in 0..n_rows {
+    for (row, last_eval) in last_evals.iter_mut().enumerate().take(n_rows) {
         let sum_other: F = cols
             .iter()
             .take(n_columns - 1)
             .map(|c| c.as_slice()[row])
             .sum();
-        last_evals[row] = -sum_other;
+        *last_eval = -sum_other;
     }
     cols[n_columns - 1] = EvaluationsList::new(last_evals);
     cols

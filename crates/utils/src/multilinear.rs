@@ -1,4 +1,3 @@
-use std::any::TypeId;
 use std::borrow::Borrow;
 
 use p3_field::PackedValue;
@@ -28,16 +27,6 @@ pub fn fold_multilinear_in_small_field<F: Field, EF: ExtensionField<F>>(
         )
     } else {
         let new_size = m.num_evals() / scalars.len();
-        if TypeId::of::<F>() == TypeId::of::<EF>() {
-            return unsafe {
-                std::mem::transmute::<EvaluationsList<F>, EvaluationsList<EF>>(
-                    fold_multilinear_packed::<F>(
-                        std::mem::transmute::<&EvaluationsList<EF>, &EvaluationsList<F>>(m),
-                        scalars,
-                    ),
-                )
-            };
-        }
 
         EvaluationsList::new(
             (0..new_size)

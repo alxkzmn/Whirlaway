@@ -42,7 +42,7 @@ impl<F: p3_field::Field, EF: ExtensionField<F> + TwoAdicField>
             .map(|&x| {
                 let mut acc = EF::ZERO;
                 for i in 0..F::Packing::WIDTH {
-                    acc = acc + EF::from(x.as_slice()[i]);
+                    acc += EF::from(x.as_slice()[i]);
                 }
                 acc
             })
@@ -304,7 +304,7 @@ fn test_with_eq_factor() {
 
     let challenger = setup_challenger();
     let domain_separator = DomainSeparator::new(vec![]);
-    let mut prover_state_no_eq = ProverState::new(&domain_separator, challenger.clone());
+    let mut prover_state_no_eq = ProverState::new(&domain_separator, challenger);
 
     let expected_sum = EF::ZERO;
 
@@ -331,7 +331,7 @@ fn test_with_eq_factor() {
         EF::from(F::new(7)),
     ];
 
-    let mut prover_state_eq = ProverState::new(&domain_separator, challenger.clone());
+    let mut prover_state_eq = ProverState::new(&domain_separator, setup_challenger());
     let (challenges, _folded, final_sum) = prove(
         1,
         &[&multilinear],

@@ -30,7 +30,7 @@ where
     domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
 
     let challenger = setup_challenger();
-    let mut prover_state = ProverState::new(&domainsep, challenger.clone());
+    let mut prover_state = ProverState::new(&domainsep, challenger);
 
     let whir_proof = table.prove(
         settings,

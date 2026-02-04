@@ -1,11 +1,8 @@
-use ::air::AirSettings;
+use air::AirSettings;
 use air::table::AirTable;
 use keccak_air::{KeccakAir, generate_trace_rows};
-use p3_challenger::{HashChallenger, SerializingChallenger32};
 use p3_field::PrimeField64;
-use p3_field::extension::BinomialExtensionField;
 use p3_keccak::Keccak256Hash;
-use p3_koala_bear::KoalaBear;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::fmt;
 use std::time::{Duration, Instant};
@@ -13,20 +10,12 @@ use tracing::level_filters::LevelFilter;
 use tracing_forest::ForestLayer;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 use utils::{ProverState, VerifierState};
-use whir_p3::{
-    fiat_shamir::domain_separator::DomainSeparator, parameters::FoldingFactor,
-    whir::parameters::WhirConfig,
-};
+use whir_p3::fiat_shamir::domain_separator::DomainSeparator;
+use whir_p3::parameters::FoldingFactor;
+use whir_p3::whir::parameters::WhirConfig;
 
-use crate::hashers::{KECCAK_DIGEST_ELEMS, KeccakNodeCompress, KeccakU32BeLeafHasher};
-
-type MerkleHash = KeccakU32BeLeafHasher; // leaf hashing
-type MerkleCompress = KeccakNodeCompress; // 2-to-1 compression
-type MyChallenger = SerializingChallenger32<F, HashChallenger<u8, Keccak256Hash, 32>>;
-
-// Koalabear
-type F = KoalaBear;
-type EF = BinomialExtensionField<F, 8>;
+use crate::circuits::keccak256::{Challenger as MyChallenger, EF, F, MerkleCompress, MerkleHash};
+use crate::hashers::KECCAK_DIGEST_ELEMS;
 
 // BabyBear
 // type F = BabyBear;
@@ -100,10 +89,11 @@ pub fn prove_keccak(
         .map(|_| std::array::from_fn(|_| rng.random()))
         .collect();
 
-    let witness_matrix = generate_trace_rows(inputs, 0).transpose();
+    let witness_matrix = generate_trace_rows(inputs, 0);
 
     let width = witness_matrix.width;
     let height = witness_matrix.values.len() / width;
+    let log_length = height.ilog2() as usize;
     let mut witness = (0..width)
         .map(|col| {
             let values = (0..height)
@@ -117,7 +107,7 @@ pub fn prove_keccak(
 
     let table = AirTable::<F, EF, _>::new(
         keccak_air,
-        (width.ilog2()) as usize,
+        log_length,
         settings.univariate_skips,
         preprocessed_columns,
         3,
@@ -162,7 +152,7 @@ pub fn prove_keccak(
                 merkle_hash,
                 merkle_compress,
                 &mut verifier_state,
-                (width.ilog2()) as usize,
+                log_length,
                 &whir_proof,
             )
             .unwrap();

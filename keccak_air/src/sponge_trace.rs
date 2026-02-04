@@ -196,10 +196,10 @@ pub(crate) fn digest_from_trace_row<F: PrimeField64>(
     use crate::columns::output_limb;
 
     let mut limbs = [0u16; DIGEST_LIMBS];
-    for i in 0..DIGEST_LIMBS {
+    for (i, limb) in limbs.iter_mut().enumerate().take(DIGEST_LIMBS) {
         let col = output_limb(i);
         let v = trace.values[row * trace.width() + col];
-        limbs[i] = v.as_canonical_u64() as u16;
+        *limb = v.as_canonical_u64() as u16;
     }
     limbs
 }

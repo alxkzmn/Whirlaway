@@ -1,29 +1,26 @@
 use p3_air::Air;
 use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger};
+use p3_dft::Radix2Bowers;
 use p3_field::{
     BasedVectorSpace, ExtensionField, Field, Packable, TwoAdicField, cyclic_subgroup_known_order,
 };
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
-use p3_dft::Radix2Bowers;
 use serde::{Deserialize, Serialize};
 use sumcheck::{SumcheckComputation, SumcheckComputationPacked, SumcheckGrinding};
 use tracing::{Level, info_span, instrument, span};
+use utils::fiat_shamir::ProverState;
 use utils::{
     ConstraintFolder, ConstraintFolderPacked, add_multilinears, multilinears_linear_combination,
     packed_multilinear,
 };
-use utils::fiat_shamir::ProverState;
+use whir_p3::parameters::ProtocolParameters;
 use whir_p3::{
     poly::{evals::EvaluationsList, multilinear::MultilinearPoint},
     whir::{
-        committer::writer::CommitmentWriter,
-        parameters::InitialPhaseConfig,
-        prover::Prover,
-        proof::WhirProof,
-        constraints::statement::EqStatement,
+        committer::writer::CommitmentWriter, constraints::statement::EqStatement,
+        parameters::InitialPhaseConfig, proof::WhirProof, prover::Prover,
     },
 };
-use whir_p3::parameters::ProtocolParameters;
 
 use crate::{
     AirSettings,
@@ -159,38 +156,43 @@ where
             .iter()
             .chain(&witness)
             .collect::<Vec<_>>();
-        let (outer_sumcheck_challenges, all_inner_sums, _) = info_span!("zerocheck").in_scope(|| {
-            sumcheck::prove(
-                settings.univariate_skips,
-                &columns_up_and_down(&preprocessed_and_witness),
-                &self.air,
-                self.constraint_degree,
-                &constraints_batching_scalars,
-                Some(&zerocheck_challenges),
-                true,
-                prover_state,
-                EF::ZERO,
-                None,
-                SumcheckGrinding::Auto {
-                    security_bits: settings.security_bits,
-                },
-                None,
-            )
-        });
+        let (outer_sumcheck_challenges, all_inner_sums, _) =
+            info_span!("zerocheck").in_scope(|| {
+                sumcheck::prove(
+                    settings.univariate_skips,
+                    &columns_up_and_down(&preprocessed_and_witness),
+                    &self.air,
+                    self.constraint_degree,
+                    &constraints_batching_scalars,
+                    Some(&zerocheck_challenges),
+                    true,
+                    prover_state,
+                    EF::ZERO,
+                    None,
+                    SumcheckGrinding::Auto {
+                        security_bits: settings.security_bits,
+                    },
+                    None,
+                )
+            });
 
         let _span = span!(Level::INFO, "inner sumchecks").entered();
 
         let inner_sums_up = all_inner_sums[self.n_preprocessed_columns()..self.n_columns]
             .iter()
-            .map(|s| s.as_constant().unwrap_or_else(|| {
-                s.evaluate_hypercube_ext::<F>(&MultilinearPoint::new(vec![]))
-            }))
+            .map(|s| {
+                s.as_constant().unwrap_or_else(|| {
+                    s.evaluate_hypercube_ext::<F>(&MultilinearPoint::new(vec![]))
+                })
+            })
             .collect::<Vec<_>>();
         let inner_sums_down = all_inner_sums[self.n_columns + self.n_preprocessed_columns()..]
             .iter()
-            .map(|s| s.as_constant().unwrap_or_else(|| {
-                s.evaluate_hypercube_ext::<F>(&MultilinearPoint::new(vec![]))
-            }))
+            .map(|s| {
+                s.as_constant().unwrap_or_else(|| {
+                    s.evaluate_hypercube_ext::<F>(&MultilinearPoint::new(vec![]))
+                })
+            })
             .collect::<Vec<_>>();
 
         prover_state.add_extension_scalars(&inner_sums_up);
@@ -240,8 +242,7 @@ where
 
         // TODO do not recompute
         let inner_sum = info_span!("inner sum evaluation").in_scope(|| {
-            batched_column_mixed
-                .evaluate_hypercube_ext::<F>(&MultilinearPoint::new(point.clone()))
+            batched_column_mixed.evaluate_hypercube_ext::<F>(&MultilinearPoint::new(point.clone()))
         });
 
         let (inner_challenges, inner_evals, _) = sumcheck::prove(
@@ -263,9 +264,9 @@ where
 
         let final_point = [columns_batching_scalars.clone(), inner_challenges].concat();
 
-        let packed_value = inner_evals[1]
-            .as_constant()
-            .unwrap_or_else(|| inner_evals[1].evaluate_hypercube_ext::<F>(&MultilinearPoint::new(vec![])));
+        let packed_value = inner_evals[1].as_constant().unwrap_or_else(|| {
+            inner_evals[1].evaluate_hypercube_ext::<F>(&MultilinearPoint::new(vec![]))
+        });
 
         std::mem::drop(_span);
 
