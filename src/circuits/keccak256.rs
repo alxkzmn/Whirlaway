@@ -79,7 +79,9 @@ fn make_table(log_length: usize, settings: &AirSettings) -> AirTable<F, EF, Kecc
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Keccak256Circuit;
+pub struct Keccak256Circuit {
+    input_size: usize,
+}
 
 impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
     type F = F;
@@ -88,15 +90,13 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
 
     type W = u64;
 
-    type Params = usize; // message length in bytes
     type Preprocessed = Keccak256Preprocessed;
     type Input = Vec<u8>; // message bytes
 
-    fn preprocess(params: &Self::Params, _settings: &AirSettings) -> Self::Preprocessed {
-        let input_size = *params;
-        let log_length = log_length_for_message_len(input_size);
+    fn preprocess(&self, _settings: &AirSettings) -> Self::Preprocessed {
+        let log_length = log_length_for_message_len(self.input_size);
         Self::Preprocessed {
-            input_size,
+            input_size: self.input_size,
             log_length,
         }
     }

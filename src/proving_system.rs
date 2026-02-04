@@ -93,11 +93,10 @@ pub trait Circuit<const DIGEST_ELEMS: usize> {
 
     type W: p3_field::PackedValue<Value = Self::W> + Eq + Send + Sync + Default;
 
-    type Params: Clone + core::fmt::Debug;
     type Preprocessed: Clone + core::fmt::Debug;
     type Input;
 
-    fn preprocess(params: &Self::Params, settings: &AirSettings) -> Self::Preprocessed;
+    fn preprocess(&self, settings: &AirSettings) -> Self::Preprocessed;
 
     fn make_table(
         preprocessed: &Self::Preprocessed,
@@ -130,8 +129,8 @@ where
 }
 
 pub fn prepare<C, S, const DIGEST_ELEMS: usize>(
-    params: C::Params,
     settings: &S,
+    circuit: C,
 ) -> Prepared<C, DIGEST_ELEMS>
 where
     C: Circuit<DIGEST_ELEMS>,
@@ -139,8 +138,8 @@ where
     C::F: serde::Serialize + for<'de> serde::Deserialize<'de>,
     C::EF: serde::Serialize + for<'de> serde::Deserialize<'de>,
 {
-    let circuit = C::preprocess(&params, settings.air_settings());
-    let table = C::make_table(&circuit, settings.air_settings());
+    let preprocessed_circuit = circuit.preprocess(settings.air_settings());
+    let table = C::make_table(&preprocessed_circuit, settings.air_settings());
 
     let whir_params = table.build_whir_params::<S::MerkleHash, S::MerkleCompress, S::Challenger>(
         settings.air_settings(),
@@ -160,7 +159,7 @@ where
 
     Prepared {
         settings: settings.air_settings().clone(),
-        circuit,
+        circuit: preprocessed_circuit,
         domain_separator,
     }
 }

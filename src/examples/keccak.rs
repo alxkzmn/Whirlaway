@@ -88,16 +88,15 @@ pub fn prove_keccak(
     let merkle_hash = MerkleHash::default();
     let merkle_compress = MerkleCompress::default();
     let challenger = MyChallenger::from_hasher(Vec::new(), Keccak256Hash);
-    let proving_settings = ProvingSystemConfig::new(
-        settings.clone(),
-        merkle_hash,
-        merkle_compress,
-        challenger,
-    );
+    let proving_settings =
+        ProvingSystemConfig::new(settings.clone(), merkle_hash, merkle_compress, challenger);
 
     let t = Instant::now();
 
-    let prepared = prepare::<KeccakAirCircuit, _, KECCAK_DIGEST_ELEMS>(n_rows, &proving_settings);
+    let keccak_air_circuit = KeccakAirCircuit { n_inputs: n_rows };
+
+    let prepared =
+        prepare::<KeccakAirCircuit, _, KECCAK_DIGEST_ELEMS>(&proving_settings, keccak_air_circuit);
     let proof = prove(&prepared, &proving_settings, &inputs);
 
     let prover_time = t.elapsed();

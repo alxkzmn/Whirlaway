@@ -28,7 +28,9 @@ pub struct KeccakAirPreprocessed {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct KeccakAirCircuit;
+pub struct KeccakAirCircuit {
+    pub n_inputs: usize,
+}
 
 impl Circuit<KECCAK_DIGEST_ELEMS> for KeccakAirCircuit {
     type F = F;
@@ -37,15 +39,16 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for KeccakAirCircuit {
 
     type W = u64;
 
-    type Params = usize; // number of inputs
     type Preprocessed = KeccakAirPreprocessed;
     type Input = Vec<[u64; 25]>;
 
-    fn preprocess(params: &Self::Params, _settings: &AirSettings) -> Self::Preprocessed {
-        let n_inputs = *params;
-        let rows = n_inputs.saturating_mul(NUM_ROUNDS);
+    fn preprocess(&self, _settings: &AirSettings) -> Self::Preprocessed {
+        let rows = self.n_inputs.saturating_mul(NUM_ROUNDS);
         let log_length = rows.next_power_of_two().ilog2() as usize;
-        Self::Preprocessed { n_inputs, log_length }
+        Self::Preprocessed {
+            n_inputs: self.n_inputs,
+            log_length,
+        }
     }
 
     fn make_table(
