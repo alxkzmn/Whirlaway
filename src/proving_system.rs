@@ -1,13 +1,18 @@
 use air::AirSettings;
 use air::table::AirTable;
 use p3_air::Air;
-use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger};
+use p3_challenger::{
+    CanObserve, FieldChallenger, GrindingChallenger, HashChallenger, SerializingChallenger32,
+};
 use p3_field::{ExtensionField, Packable, PrimeField64, TwoAdicField};
+use p3_keccak::Keccak256Hash;
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
 use utils::{ProverState, VerifierState};
 use whir_p3::fiat_shamir::domain_separator::DomainSeparator;
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::whir::proof::WhirProof;
+
+use crate::hashers::{KECCAK_DIGEST_ELEMS, KeccakNodeCompress, KeccakU32BeLeafHasher};
 
 pub trait ProvingSystemSettings<C, const DIGEST_ELEMS: usize>
 where
@@ -80,6 +85,38 @@ where
 
     fn new_challenger(&self) -> Self::Challenger {
         self.challenger.clone()
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct KeccakProvingSystemConfig {
+    pub air_settings: AirSettings,
+}
+
+impl ProvingSystemSettings<crate::circuits::keccak_air::KeccakAirCircuit, KECCAK_DIGEST_ELEMS>
+    for KeccakProvingSystemConfig
+{
+    type MerkleHash = KeccakU32BeLeafHasher;
+    type MerkleCompress = KeccakNodeCompress;
+    type Challenger = SerializingChallenger32<
+        crate::circuits::keccak_air::F,
+        HashChallenger<u8, Keccak256Hash, 32>,
+    >;
+
+    fn air_settings(&self) -> &AirSettings {
+        &self.air_settings
+    }
+
+    fn merkle_hash(&self) -> Self::MerkleHash {
+        KeccakU32BeLeafHasher
+    }
+
+    fn merkle_compress(&self) -> Self::MerkleCompress {
+        KeccakNodeCompress
+    }
+
+    fn new_challenger(&self) -> Self::Challenger {
+        SerializingChallenger32::from_hasher(Vec::new(), Keccak256Hash)
     }
 }
 

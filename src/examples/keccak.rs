@@ -1,5 +1,4 @@
 use air::AirSettings;
-use p3_keccak::Keccak256Hash;
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::fmt;
 use std::time::{Duration, Instant};
@@ -8,11 +7,9 @@ use tracing_forest::ForestLayer;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 use whir_p3::parameters::FoldingFactor;
 
-use crate::circuits::keccak_air::{
-    Challenger as MyChallenger, KeccakAirCircuit, MerkleCompress, MerkleHash,
-};
+use crate::circuits::keccak_air::KeccakAirCircuit;
 use crate::hashers::KECCAK_DIGEST_ELEMS;
-use crate::proving_system::{ProvingSystemConfig, prepare, proof_size, prove, verify};
+use crate::proving_system::{KeccakProvingSystemConfig, prepare, proof_size, prove, verify};
 
 // BabyBear
 // type F = BabyBear;
@@ -85,11 +82,9 @@ pub fn prove_keccak(
         .map(|_| std::array::from_fn(|_| rng.random()))
         .collect();
 
-    let merkle_hash = MerkleHash::default();
-    let merkle_compress = MerkleCompress::default();
-    let challenger = MyChallenger::from_hasher(Vec::new(), Keccak256Hash);
-    let proving_settings =
-        ProvingSystemConfig::new(settings.clone(), merkle_hash, merkle_compress, challenger);
+    let proving_settings = KeccakProvingSystemConfig {
+        air_settings: settings.clone(),
+    };
 
     let t = Instant::now();
 
