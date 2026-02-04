@@ -4,11 +4,84 @@ use p3_air::Air;
 use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger};
 use p3_field::{ExtensionField, Packable, PrimeField64, TwoAdicField};
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
-use serde::{Deserialize, Serialize};
 use utils::{ProverState, VerifierState};
 use whir_p3::fiat_shamir::domain_separator::DomainSeparator;
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::whir::proof::WhirProof;
+
+pub trait ProvingSystemSettings<C, const DIGEST_ELEMS: usize>
+where
+    C: Circuit<DIGEST_ELEMS>,
+{
+    type MerkleHash: CryptographicHasher<C::F, [C::W; DIGEST_ELEMS]> + Sync + Clone;
+    type MerkleCompress: PseudoCompressionFunction<[C::W; DIGEST_ELEMS], 2> + Sync + Clone;
+
+    type Challenger: FieldChallenger<C::F>
+        + GrindingChallenger<Witness = C::F>
+        + CanObserve<p3_symmetric::Hash<C::F, C::W, DIGEST_ELEMS>>
+        + Clone;
+
+    fn air_settings(&self) -> &AirSettings;
+    fn merkle_hash(&self) -> Self::MerkleHash;
+    fn merkle_compress(&self) -> Self::MerkleCompress;
+    fn new_challenger(&self) -> Self::Challenger;
+}
+
+#[derive(Clone, Debug)]
+pub struct ProvingSystemConfig<MH, MC, CH> {
+    pub air_settings: AirSettings,
+    pub merkle_hash: MH,
+    pub merkle_compress: MC,
+    pub challenger: CH,
+}
+
+impl<MH, MC, CH> ProvingSystemConfig<MH, MC, CH> {
+    pub fn new(
+        air_settings: AirSettings,
+        merkle_hash: MH,
+        merkle_compress: MC,
+        challenger: CH,
+    ) -> Self {
+        Self {
+            air_settings,
+            merkle_hash,
+            merkle_compress,
+            challenger,
+        }
+    }
+}
+
+impl<C, MH, MC, CH, const DIGEST_ELEMS: usize> ProvingSystemSettings<C, DIGEST_ELEMS>
+    for ProvingSystemConfig<MH, MC, CH>
+where
+    C: Circuit<DIGEST_ELEMS>,
+    MH: CryptographicHasher<C::F, [C::W; DIGEST_ELEMS]> + Sync + Clone,
+    MC: PseudoCompressionFunction<[C::W; DIGEST_ELEMS], 2> + Sync + Clone,
+    CH: FieldChallenger<C::F>
+        + GrindingChallenger<Witness = C::F>
+        + CanObserve<p3_symmetric::Hash<C::F, C::W, DIGEST_ELEMS>>
+        + Clone,
+{
+    type MerkleHash = MH;
+    type MerkleCompress = MC;
+    type Challenger = CH;
+
+    fn air_settings(&self) -> &AirSettings {
+        &self.air_settings
+    }
+
+    fn merkle_hash(&self) -> Self::MerkleHash {
+        self.merkle_hash.clone()
+    }
+
+    fn merkle_compress(&self) -> Self::MerkleCompress {
+        self.merkle_compress.clone()
+    }
+
+    fn new_challenger(&self) -> Self::Challenger {
+        self.challenger.clone()
+    }
+}
 
 pub trait Circuit<const DIGEST_ELEMS: usize> {
     type F: TwoAdicField + PrimeField64 + Ord + Eq + Packable + Default;
@@ -20,19 +93,8 @@ pub trait Circuit<const DIGEST_ELEMS: usize> {
 
     type W: p3_field::PackedValue<Value = Self::W> + Eq + Send + Sync + Default;
 
-    type MerkleHash: CryptographicHasher<Self::F, [Self::W; DIGEST_ELEMS]> + Sync + Clone + Default;
-    type MerkleCompress: PseudoCompressionFunction<[Self::W; DIGEST_ELEMS], 2>
-        + Sync
-        + Clone
-        + Default;
-
-    type Challenger: FieldChallenger<Self::F>
-        + GrindingChallenger<Witness = Self::F>
-        + CanObserve<p3_symmetric::Hash<Self::F, Self::W, DIGEST_ELEMS>>
-        + Clone;
-
-    type Params: Clone + Serialize + for<'de> Deserialize<'de> + core::fmt::Debug;
-    type Preprocessed: Clone + Serialize + for<'de> Deserialize<'de> + core::fmt::Debug;
+    type Params: Clone + core::fmt::Debug;
+    type Preprocessed: Clone + core::fmt::Debug;
     type Input;
 
     fn preprocess(params: &Self::Params, settings: &AirSettings) -> Self::Preprocessed;
@@ -46,11 +108,9 @@ pub trait Circuit<const DIGEST_ELEMS: usize> {
         preprocessed: &Self::Preprocessed,
         input: &Self::Input,
     ) -> Vec<EvaluationsList<Self::F>>;
-
-    fn new_challenger() -> Self::Challenger;
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Prepared<C, const DIGEST_ELEMS: usize>
 where
     C: Circuit<DIGEST_ELEMS>,
@@ -69,47 +129,50 @@ where
     pub proof_data: Vec<C::EF>,
 }
 
-pub fn prepare<C, const DIGEST_ELEMS: usize>(
+pub fn prepare<C, S, const DIGEST_ELEMS: usize>(
     params: C::Params,
-    settings: AirSettings,
+    settings: &S,
 ) -> Prepared<C, DIGEST_ELEMS>
 where
     C: Circuit<DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
     C::F: serde::Serialize + for<'de> serde::Deserialize<'de>,
     C::EF: serde::Serialize + for<'de> serde::Deserialize<'de>,
 {
-    let circuit = C::preprocess(&params, &settings);
-    let table = C::make_table(&circuit, &settings);
+    let circuit = C::preprocess(&params, settings.air_settings());
+    let table = C::make_table(&circuit, settings.air_settings());
 
-    let whir_params = table.build_whir_params::<C::MerkleHash, C::MerkleCompress, C::Challenger>(
-        &settings,
-        C::MerkleHash::default(),
-        C::MerkleCompress::default(),
+    let whir_params = table.build_whir_params::<S::MerkleHash, S::MerkleCompress, S::Challenger>(
+        settings.air_settings(),
+        settings.merkle_hash(),
+        settings.merkle_compress(),
     );
 
     let mut domain_separator = DomainSeparator::<C::EF, C::F>::new(Vec::new());
     domain_separator
-        .commit_statement::<C::MerkleHash, C::MerkleCompress, C::Challenger, DIGEST_ELEMS>(
+        .commit_statement::<S::MerkleHash, S::MerkleCompress, S::Challenger, DIGEST_ELEMS>(
             &whir_params,
         );
     domain_separator
-        .add_whir_proof::<C::MerkleHash, C::MerkleCompress, C::Challenger, DIGEST_ELEMS>(
+        .add_whir_proof::<S::MerkleHash, S::MerkleCompress, S::Challenger, DIGEST_ELEMS>(
             &whir_params,
         );
 
     Prepared {
-        settings,
+        settings: settings.air_settings().clone(),
         circuit,
         domain_separator,
     }
 }
 
-pub fn prove<C, const DIGEST_ELEMS: usize>(
+pub fn prove<C, S, const DIGEST_ELEMS: usize>(
     prepared: &Prepared<C, DIGEST_ELEMS>,
+    settings: &S,
     input: &C::Input,
 ) -> Proof<C, DIGEST_ELEMS>
 where
     C: Circuit<DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
     C::F: Eq,
     C::EF: Default,
     C::W: p3_field::PackedValue<Value = C::W> + Eq + Send + Sync + Default,
@@ -119,14 +182,14 @@ where
     let witness = C::build_witness(&prepared.circuit, input);
     let table = C::make_table(&prepared.circuit, &prepared.settings);
 
-    let challenger = C::new_challenger();
+    let challenger = settings.new_challenger();
     let mut prover_state = ProverState::new(&prepared.domain_separator, challenger.clone());
 
     let whir_proof = table
-        .prove::<C::MerkleHash, C::MerkleCompress, C::Challenger, C::W, DIGEST_ELEMS>(
+        .prove::<S::MerkleHash, S::MerkleCompress, S::Challenger, C::W, DIGEST_ELEMS>(
             &prepared.settings,
-            C::MerkleHash::default(),
-            C::MerkleCompress::default(),
+            settings.merkle_hash(),
+            settings.merkle_compress(),
             &mut prover_state,
             witness,
         );
@@ -137,12 +200,14 @@ where
     }
 }
 
-pub fn verify<C, const DIGEST_ELEMS: usize>(
+pub fn verify<C, S, const DIGEST_ELEMS: usize>(
     prepared: &Prepared<C, DIGEST_ELEMS>,
+    settings: &S,
     proof: &Proof<C, DIGEST_ELEMS>,
 ) -> Result<(), String>
 where
     C: Circuit<DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
     C::F: Eq,
     C::W: p3_field::PackedValue<Value = C::W> + Eq + Send + Sync + Copy,
     [C::W; DIGEST_ELEMS]: serde::Serialize + for<'de> serde::Deserialize<'de>,
@@ -150,7 +215,7 @@ where
 {
     let table = C::make_table(&prepared.circuit, &prepared.settings);
 
-    let challenger = C::new_challenger();
+    let challenger = settings.new_challenger();
     let mut verifier_state = VerifierState::new(
         &prepared.domain_separator,
         proof.proof_data.clone(),
@@ -158,10 +223,10 @@ where
     );
 
     table
-        .verify::<C::MerkleHash, C::MerkleCompress, C::Challenger, C::W, DIGEST_ELEMS>(
+        .verify::<S::MerkleHash, S::MerkleCompress, S::Challenger, C::W, DIGEST_ELEMS>(
             &prepared.settings,
-            C::MerkleHash::default(),
-            C::MerkleCompress::default(),
+            settings.merkle_hash(),
+            settings.merkle_compress(),
             &mut verifier_state,
             table.log_length,
             &proof.whir_proof,
@@ -174,8 +239,11 @@ pub fn preprocessing_size<C, const DIGEST_ELEMS: usize>(
 ) -> usize
 where
     C: Circuit<DIGEST_ELEMS>,
+    C::Preprocessed: serde::Serialize,
 {
-    bincode::serialize(prepared).map(|v| v.len()).unwrap_or(0)
+    bincode::serialize(&(prepared.settings.clone(), &prepared.circuit))
+        .map(|v| v.len())
+        .unwrap_or(0)
 }
 
 pub fn proof_size<C, const DIGEST_ELEMS: usize>(proof: &Proof<C, DIGEST_ELEMS>) -> usize
