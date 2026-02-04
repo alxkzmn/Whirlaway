@@ -5,14 +5,12 @@ use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
 use serde::{Deserialize, Serialize};
 use sumcheck::{SumcheckComputation, SumcheckError, SumcheckGrinding};
 use tracing::instrument;
-use utils::{ConstraintFolder, fold_multilinear_in_large_field, log2_up, ProofError};
 use utils::fiat_shamir::VerifierState;
+use utils::{ConstraintFolder, ProofError, fold_multilinear_in_large_field, log2_up};
 use whir_p3::{
     poly::{evals::EvaluationsList, multilinear::MultilinearPoint},
     whir::{
-        committer::reader::CommitmentReader,
-        proof::WhirProof,
-        constraints::statement::EqStatement,
+        committer::reader::CommitmentReader, constraints::statement::EqStatement, proof::WhirProof,
         verifier::Verifier,
     },
 };
@@ -188,9 +186,10 @@ impl<
         let sub_evals =
             verifier_state.next_extension_scalars_vec(1 << settings.univariate_skips)?;
 
-        let column_batching_evals = EvaluationsList::new_from_point(&columns_batching_scalars, EF::ONE)
-            .as_slice()[..self.n_witness_columns()]
-            .to_vec();
+        let column_batching_evals =
+            EvaluationsList::new_from_point(&columns_batching_scalars, EF::ONE).as_slice()
+                [..self.n_witness_columns()]
+                .to_vec();
         let batched_witness_up = dot_product::<EF, _, _>(
             witness_up.iter().copied(),
             column_batching_evals.iter().copied(),
@@ -247,10 +246,8 @@ impl<
         .concat();
 
         let mut statement = EqStatement::initialize(final_point.len());
-        statement.add_evaluated_constraint(
-            MultilinearPoint::new(final_point),
-            expected_final_value,
-        );
+        statement
+            .add_evaluated_constraint(MultilinearPoint::new(final_point), expected_final_value);
         whir_verifier
             .verify::<F, W, W, DIGEST_ELEMS>(
                 whir_proof,

@@ -30,8 +30,8 @@ fn traces_match_for_random_inputs() {
     let inputs: Vec<[u64; 25]> = (0..num_perms)
         .map(|_| {
             let mut a = [0u64; 25];
-            for i in 0..25 {
-                a[i] = rng.random();
+            for item in &mut a {
+                *item = rng.random();
             }
             a
         })
@@ -71,8 +71,8 @@ fn keccak_sponge_end_to_end_matches_reference_digest() {
     let digest = hasher.finalize();
 
     let mut expected_limbs = [0u16; DIGEST_LIMBS];
-    for i in 0..DIGEST_LIMBS {
-        expected_limbs[i] = u16::from_le_bytes([digest[2 * i], digest[2 * i + 1]]);
+    for (i, limb) in expected_limbs.iter_mut().enumerate().take(DIGEST_LIMBS) {
+        *limb = u16::from_le_bytes([digest[2 * i], digest[2 * i + 1]]);
     }
     assert_eq!(digest_limbs, expected_limbs);
 

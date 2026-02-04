@@ -22,8 +22,8 @@ impl<AB: p3_air::AirBuilder<F = F>> Air<AB> for SimpleAir {
             .expect("Matrix should have at least one row")
             .into_iter()
             .collect();
-        for col in 0..width {
-            sum = sum + row[col].clone();
+        for value in row.iter().take(width) {
+            sum += value.clone();
         }
         builder.assert_zero(sum);
     }
@@ -188,8 +188,7 @@ fn test_sumcheck_computation_with_constraint_folder() {
     let air = SimpleAir;
 
     // Create a matrix view
-    let data: Vec<F> = vec![F::new(1), F::new(2), F::new(3), F::new(4)];
-    let point: Vec<F> = data.clone();
+    let point: Vec<F> = vec![F::new(1), F::new(2), F::new(3), F::new(4)];
     let alpha_powers = vec![EF::ONE];
 
     // This should work the same as the trait method

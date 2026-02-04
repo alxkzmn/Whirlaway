@@ -4,7 +4,6 @@ use p3_challenger::DuplexChallenger;
 use p3_field::PrimeField64;
 use p3_field::extension::BinomialExtensionField;
 use p3_koala_bear::{GenericPoseidon2LinearLayersKoalaBear, KoalaBear, Poseidon2KoalaBear};
-use p3_matrix::Matrix;
 use p3_poseidon2_air::{Poseidon2Air, RoundConstants, generate_trace_rows};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use rand::{Rng, SeedableRng, rngs::StdRng};
@@ -128,12 +127,17 @@ pub fn prove_poseidon2(
         SBOX_REGISTERS,
         HALF_FULL_ROUNDS,
         PARTIAL_ROUNDS,
-    >(inputs, &constants, 0)
-    .transpose();
+    >(inputs, &constants, 0);
 
-    let mut witness = witness_matrix
-        .rows()
-        .map(|col| whir_p3::poly::evals::EvaluationsList::new(col.collect()))
+    let width = witness_matrix.width;
+    let height = witness_matrix.values.len() / width;
+    let mut witness = (0..width)
+        .map(|col| {
+            let values = (0..height)
+                .map(|row| witness_matrix.values[row * width + col])
+                .collect::<Vec<_>>();
+            whir_p3::poly::evals::EvaluationsList::new(values)
+        })
         .collect::<Vec<_>>();
 
     let preprocessed_columns = witness.drain(..n_preprocessed_columns).collect::<Vec<_>>();

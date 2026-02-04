@@ -121,8 +121,7 @@ fn test_complete_air_prove_verify() {
     let mut verify_domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
     verify_domainsep.commit_statement::<_, _, _, 8>(&whir_params);
     verify_domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
-    let mut verifier_state =
-        VerifierState::new(&verify_domainsep, proof_data, setup_challenger());
+    let mut verifier_state = VerifierState::new(&verify_domainsep, proof_data, setup_challenger());
     let result = table.verify(
         &settings,
         merkle_hash,
@@ -152,7 +151,7 @@ fn test_complete_air_prove_verify_keccak_backend() {
     let merkle_compress = setup_keccak_merkle_compress();
 
     let whir_params: WhirConfig<_, _, _, _, KeccakChallenger> =
-        table.build_whir_params(&settings, merkle_hash.clone(), merkle_compress.clone());
+        table.build_whir_params(&settings, merkle_hash, merkle_compress);
 
     let mut domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
     domainsep.commit_statement::<_, _, _, KECCAK_DIGEST_ELEMS>(&whir_params);
@@ -163,8 +162,8 @@ fn test_complete_air_prove_verify_keccak_backend() {
 
     let whir_proof = table.prove(
         &settings,
-        merkle_hash.clone(),
-        merkle_compress.clone(),
+        merkle_hash,
+        merkle_compress,
         &mut prover_state,
         witness,
     );
@@ -229,8 +228,7 @@ fn test_air_prove_verify_with_preprocessed() {
     let mut verify_domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
     verify_domainsep.commit_statement::<_, _, _, 8>(&whir_params);
     verify_domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
-    let mut verifier_state =
-        VerifierState::new(&verify_domainsep, proof_data, setup_challenger());
+    let mut verifier_state = VerifierState::new(&verify_domainsep, proof_data, setup_challenger());
 
     let result = table.verify(
         &settings,
@@ -339,8 +337,7 @@ fn test_air_prove_verify_larger_table() {
     let mut verify_domainsep: DomainSeparator<EF, F> = DomainSeparator::new(vec![]);
     verify_domainsep.commit_statement::<_, _, _, 8>(&whir_params);
     verify_domainsep.add_whir_proof::<_, _, _, 8>(&whir_params);
-    let mut verifier_state =
-        VerifierState::new(&verify_domainsep, proof_data, setup_challenger());
+    let mut verifier_state = VerifierState::new(&verify_domainsep, proof_data, setup_challenger());
     let result = table.verify(
         &settings,
         merkle_hash,

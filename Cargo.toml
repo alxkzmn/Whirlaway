@@ -133,10 +133,11 @@ p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
 p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
 keccak_air = { path = "./keccak_air" }
 
-whir-p3 = { git = "https://github.com/alxkzmn/whir-p3", rev = "3ebff92" }
+whir-p3 = { git = "https://github.com/alxkzmn/whir-p3", rev = "385a129" }
 
 [dependencies]
 air.workspace = true
+p3-air.workspace = true
 p3-field.workspace = true
 tracing.workspace = true
 p3-koala-bear.workspace = true
@@ -154,6 +155,8 @@ tracing-subscriber.workspace = true
 whir-p3.workspace = true
 p3-uni-stark.workspace = true
 utils.workspace = true
+bincode = { version = "1.3.3" }
+serde = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }

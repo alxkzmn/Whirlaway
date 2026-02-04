@@ -11,9 +11,10 @@ use p3_poseidon2 as _;
 
 const WHIR_POW_BITS: usize = 16;
 
+use serde::{Deserialize, Serialize};
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AirSettings {
     pub security_bits: usize,
     pub whir_soudness_type: SecurityAssumption,

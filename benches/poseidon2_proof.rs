@@ -164,7 +164,7 @@ fn bench(c: &mut Criterion) {
     let table = AirTable::<F, EF, _>::new(
         poseidon_air,
         log_n_rows,
-        settings.univariate_skips.clone(),
+        settings.univariate_skips,
         preprocessed_columns,
         3,
     );

@@ -14,10 +14,10 @@ fn test_air_table_new() {
     let constraint_degree = 1;
 
     let table = AirTable::<F, EF, _>::new(
-        air.clone(),
+        air,
         log_length,
         univariate_skips,
-        preprocessed.clone(),
+        preprocessed,
         constraint_degree,
     );
 
@@ -125,7 +125,7 @@ fn test_air_table_preprocessed_columns() {
     let n_preprocessed = 3;
     let preprocessed = create_preprocessed_columns(log_length, n_preprocessed);
 
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed.clone(), 1);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, 1);
 
     assert_eq!(table.n_preprocessed_columns(), n_preprocessed);
     assert_eq!(table.n_witness_columns(), 6 - n_preprocessed);

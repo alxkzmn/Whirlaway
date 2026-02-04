@@ -1,8 +1,8 @@
 use p3_challenger::{FieldChallenger, GrindingChallenger};
 use p3_field::{ExtensionField, Field, TwoAdicField};
 use rayon::prelude::*;
-use utils::{log2_up, ProofError};
 use utils::fiat_shamir::ProverState;
+use utils::{ProofError, log2_up};
 use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
 
 use crate::{AirSettings, table::AirTable};
