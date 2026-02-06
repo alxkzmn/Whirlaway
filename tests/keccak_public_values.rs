@@ -1,5 +1,6 @@
 use air::AirSettings;
 use p3_field::PrimeCharacteristicRing;
+use sha3::Digest;
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 use whirlaway::circuits::keccak256::{F, Keccak256Circuit, Keccak256Input};
 use whirlaway::hashers::KECCAK_DIGEST_ELEMS;
@@ -24,11 +25,10 @@ fn test_keccak_public_values_binding() {
     };
 
     let prepared = prepare::<Keccak256Circuit, _, KECCAK_DIGEST_ELEMS>(&config, circuit);
-    let (_trace, digest_limbs) =
-        keccak_air::generate_sponge_trace_and_digest_limbs::<F>(&message);
+    let expected_digest: [u8; 32] = sha3::Keccak256::digest(&message).into();
     let input = Keccak256Input {
         message: message.clone(),
-        digest_limbs,
+        expected_digest,
     };
     let public_values = Keccak256Circuit::public_values(&prepared.circuit, &input);
     let proof = prove(&prepared, &input);

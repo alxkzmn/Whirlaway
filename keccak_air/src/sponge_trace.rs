@@ -46,7 +46,7 @@ fn state_to_bits_le(state: &[u64; 25]) -> [u8; STATE_BITS] {
     bits
 }
 
-fn digest_to_u16_limbs_le(digest: &[u8; 32]) -> [u16; DIGEST_LIMBS] {
+pub fn digest_to_u16_limbs_le(digest: &[u8; 32]) -> [u16; DIGEST_LIMBS] {
     let mut out = [0u16; DIGEST_LIMBS];
     for i in 0..DIGEST_LIMBS {
         out[i] = u16::from_le_bytes([digest[2 * i], digest[2 * i + 1]]);
