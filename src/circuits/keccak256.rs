@@ -1,7 +1,8 @@
 use air::AirSettings;
 use air::table::AirTable;
 use keccak_air::{
-    DIGEST_LIMBS, KeccakSpongeAir, NUM_ROUNDS, RATE_BYTES, generate_sponge_trace_and_digest_limbs,
+    DIGEST_LIMBS, KeccakSpongeAir, NUM_ROUNDS, RATE_BYTES, digest_to_u16_limbs_le,
+    generate_sponge_trace_and_digest_limbs,
 };
 use p3_challenger::{HashChallenger, SerializingChallenger32};
 use p3_field::extension::BinomialExtensionField;
@@ -69,7 +70,7 @@ pub struct Keccak256Circuit {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Keccak256Input {
     pub message: Vec<u8>,
-    pub digest_limbs: [u16; DIGEST_LIMBS],
+    pub expected_digest: [u8; 32],
 }
 
 impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
@@ -114,8 +115,7 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
     }
 
     fn public_values(_preprocessed: &Self::Preprocessed, input: &Self::Input) -> Vec<Self::F> {
-        input
-            .digest_limbs
+        digest_to_u16_limbs_le(&input.expected_digest)
             .iter()
             .map(|&limb| F::from_u16(limb))
             .collect()

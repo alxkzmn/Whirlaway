@@ -10,6 +10,7 @@ use whir_p3::parameters::FoldingFactor;
 use crate::circuits::keccak256::{Keccak256Circuit, Keccak256Input};
 use crate::hashers::KECCAK_DIGEST_ELEMS;
 use crate::proving_system::{Circuit, KeccakProvingSystemConfig, prepare, proof_size, prove, verify};
+use sha3::Digest;
 
 // BabyBear
 // type F = BabyBear;
@@ -118,12 +119,10 @@ pub fn prove_keccak(
 
     let prepared =
         prepare::<Keccak256Circuit, _, KECCAK_DIGEST_ELEMS>(&proving_settings, keccak_air_circuit);
-    let (_trace, digest_limbs) = keccak_air::generate_sponge_trace_and_digest_limbs::<
-        crate::circuits::keccak256::F,
-    >(&message);
+    let expected_digest: [u8; 32] = sha3::Keccak256::digest(&message).into();
     let input = Keccak256Input {
         message,
-        digest_limbs,
+        expected_digest,
     };
     let public_values = Keccak256Circuit::public_values(&prepared.circuit, &input);
     let proof = prove(&prepared, &input);

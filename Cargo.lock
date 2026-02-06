@@ -1440,6 +1440,7 @@ dependencies = [
  "p3-uni-stark",
  "rand",
  "serde",
+ "sha3",
  "sumcheck",
  "tracing",
  "tracing-forest",
