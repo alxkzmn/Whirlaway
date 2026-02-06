@@ -30,6 +30,8 @@ pub fn prove<F, NF, EF, M, SC, Challenger>(
     n_rounds: Option<usize>,
     grinding: SumcheckGrinding,
     mut missing_mul_factor: Option<EF>,
+    public_values: &[NF],
+    public_values_packed: &[F::Packing],
 ) -> (Vec<EF>, Vec<EvaluationsList<EF>>, EF)
 where
     F: TwoAdicField,
@@ -52,6 +54,12 @@ where
         assert_eq!(eq_factor.len(), n_vars - skips + 1);
     }
 
+    let public_values_ef = public_values
+        .iter()
+        .copied()
+        .map(EF::from)
+        .collect::<Vec<_>>();
+
     let mut folded_multilinears = sc_round(
         skips,
         &multilinears,
@@ -67,6 +75,8 @@ where
         &mut challenges,
         0,
         &mut missing_mul_factor,
+        public_values,
+        public_values_packed,
     );
 
     for i in 1..n_rounds {
@@ -85,6 +95,8 @@ where
             &mut challenges,
             i,
             &mut missing_mul_factor,
+            &public_values_ef,
+            public_values_packed,
         );
     }
 
@@ -108,6 +120,8 @@ pub fn sc_round<F, NF, EF, SC, Challenger>(
     challenges: &mut Vec<EF>,
     round: usize,
     missing_mul_factor: &mut Option<EF>,
+    public_values: &[NF],
+    public_values_packed: &[F::Packing],
 ) -> Vec<EvaluationsList<EF>>
 where
     F: TwoAdicField,
@@ -186,8 +200,15 @@ where
                 batch_fold_multilinear_in_small_field(multilinears, &folding_scalars)
             };
 
-            let mut sum_z =
-                compute_over_hypercube(&folded, computation, batching_scalars, eq_mle.as_ref());
+            let mut sum_z = compute_over_hypercube(
+                &folded,
+                computation,
+                batching_scalars,
+                eq_mle.as_ref(),
+                public_values,
+                public_values_packed,
+            );
+
             if let Some(missing_mul_factor) = missing_mul_factor {
                 sum_z *= *missing_mul_factor;
             }
@@ -278,6 +299,8 @@ fn compute_over_hypercube<F, NF, EF, SC>(
     computation: &SC,
     batching_scalars: &[EF],
     eq_mle: Option<&EvaluationsList<EF>>,
+    public_values: &[NF],
+    public_values_packed: &[F::Packing],
 ) -> EF
 where
     F: Field,
@@ -322,6 +345,7 @@ where
                         &point,
                         batching_scalars,
                         &decomposed_batching_scalars,
+                        public_values_packed,
                     );
                     if let Some(eq_mle) = eq_mle {
                         res.enumerate()
@@ -342,7 +366,7 @@ where
                         .iter()
                         .map(|pol| pol.as_slice()[x])
                         .collect::<Vec<_>>();
-                    let mut res = computation.eval(&point, batching_scalars);
+                    let mut res = computation.eval(&point, batching_scalars, public_values);
                     if let Some(eq_mle) = eq_mle {
                         res *= eq_mle.as_slice()[x];
                     }
@@ -358,7 +382,13 @@ where
             .map(|x| {
                 let point = pols.iter().map(|pol| pol.as_slice()[x]).collect::<Vec<_>>();
                 let eq_mle_eval = eq_mle.map(|p| p.as_slice()[x]);
-                eval_sumcheck_computation(computation, batching_scalars, &point, eq_mle_eval)
+                eval_sumcheck_computation(
+                    computation,
+                    batching_scalars,
+                    &point,
+                    eq_mle_eval,
+                    public_values,
+                )
             })
             .sum()
     }
@@ -369,6 +399,7 @@ pub fn eval_sumcheck_computation<F, NF, EF, SC>(
     batching_scalars: &[EF],
     point: &[NF],
     eq_mle_eval: Option<EF>,
+    public_values: &[NF],
 ) -> EF
 where
     F: Field,
@@ -376,6 +407,6 @@ where
     EF: ExtensionField<NF>,
     SC: SumcheckComputation<F, NF, EF>,
 {
-    let res = computation.eval(point, batching_scalars);
+    let res = computation.eval(point, batching_scalars, public_values);
     eq_mle_eval.map_or(res, |factor| res * factor)
 }

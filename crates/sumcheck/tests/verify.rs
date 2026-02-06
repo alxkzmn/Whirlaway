@@ -19,7 +19,7 @@ struct SimpleSumComputation;
 impl<F: p3_field::Field, NF: p3_field::ExtensionField<F>, EF: p3_field::ExtensionField<NF>>
     sumcheck::SumcheckComputation<F, NF, EF> for SimpleSumComputation
 {
-    fn eval(&self, point: &[NF], _: &[EF]) -> EF {
+    fn eval(&self, point: &[NF], _: &[EF], _: &[NF]) -> EF {
         point.iter().map(|&x| EF::from(x)).sum()
     }
 }
@@ -32,6 +32,7 @@ impl<F: p3_field::Field, EF: ExtensionField<F> + TwoAdicField>
         point: &[<F as p3_field::Field>::Packing],
         _: &[EF],
         _: &[Vec<F>],
+        _: &[<F as p3_field::Field>::Packing],
     ) -> impl Iterator<Item = EF> + Send + Sync {
         use p3_field::PackedValue;
         point
@@ -85,6 +86,8 @@ fn test_basic_verify() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     // Verify
@@ -128,6 +131,8 @@ fn test_multi_round_verify() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -167,6 +172,8 @@ fn test_verify_with_univariate_skip() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -210,6 +217,8 @@ fn test_verify_with_grinding() {
         None,
         SumcheckGrinding::Auto { security_bits: 128 },
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -264,6 +273,8 @@ fn test_verify_sum_mismatch() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     // Corrupt the proof data
@@ -304,6 +315,8 @@ fn test_verify_higher_degree() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -346,6 +359,8 @@ fn test_verify_single_variable() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(

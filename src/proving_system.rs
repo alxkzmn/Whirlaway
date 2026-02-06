@@ -144,6 +144,12 @@ pub trait Circuit<const DIGEST_ELEMS: usize> {
         preprocessed: &Self::Preprocessed,
         input: &Self::Input,
     ) -> Vec<EvaluationsList<Self::F>>;
+
+    fn public_values(preprocessed: &Self::Preprocessed, input: &Self::Input) -> Vec<Self::F> {
+        let _ = preprocessed;
+        let _ = input;
+        Vec::new()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -217,9 +223,13 @@ where
 {
     let witness = C::build_witness(&prepared.circuit, input);
     let table = C::make_table(&prepared.circuit, prepared.settings.air_settings());
+    let public_values = C::public_values(&prepared.circuit, input);
 
     let challenger = &prepared.settings.new_challenger();
     let mut prover_state = ProverState::new(&prepared.domain_separator, challenger.clone());
+    for value in &public_values {
+        prover_state.challenger_mut().observe(*value);
+    }
 
     let whir_proof = table
         .prove::<S::MerkleHash, S::MerkleCompress, S::Challenger, C::W, DIGEST_ELEMS>(
@@ -227,6 +237,7 @@ where
             prepared.settings.merkle_hash(),
             prepared.settings.merkle_compress(),
             &mut prover_state,
+            &public_values,
             witness,
         );
 
@@ -239,6 +250,7 @@ where
 pub fn verify<C, S, const DIGEST_ELEMS: usize>(
     prepared: &Prepared<C, S, DIGEST_ELEMS>,
     proof: &Proof<C, DIGEST_ELEMS>,
+    public_values: &[C::F],
 ) -> Result<(), String>
 where
     C: Circuit<DIGEST_ELEMS>,
@@ -256,6 +268,9 @@ where
         proof.proof_data.clone(),
         challenger,
     );
+    for value in public_values {
+        verifier_state.challenger_mut().observe(*value);
+    }
 
     table
         .verify::<S::MerkleHash, S::MerkleCompress, S::Challenger, C::W, DIGEST_ELEMS>(
@@ -263,6 +278,7 @@ where
             prepared.settings.merkle_hash(),
             prepared.settings.merkle_compress(),
             &mut verifier_state,
+            public_values,
             table.log_length,
             &proof.whir_proof,
         )

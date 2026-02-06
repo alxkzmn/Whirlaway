@@ -161,6 +161,7 @@ serde = { workspace = true }
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 utils = { path = "crates/utils" }
+keccak_air = { workspace = true, features = ["test-utils"] }
 p3-air.workspace = true
 p3-baby-bear.workspace = true
 sumcheck = { path = "crates/sumcheck" }

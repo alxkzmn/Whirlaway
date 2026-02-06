@@ -77,7 +77,7 @@ fn bench(c: &mut Criterion) {
 
     group.bench_function("verify", |b| {
         b.iter(|| {
-            let _ = verify(&prepared, &proof);
+            let _ = verify(&prepared, &proof, &[]);
         });
     });
 }

@@ -20,7 +20,7 @@ struct SimpleSumComputation;
 impl<F: p3_field::Field, NF: p3_field::ExtensionField<F>, EF: p3_field::ExtensionField<NF>>
     sumcheck::SumcheckComputation<F, NF, EF> for SimpleSumComputation
 {
-    fn eval(&self, point: &[NF], _: &[EF]) -> EF {
+    fn eval(&self, point: &[NF], _: &[EF], _: &[NF]) -> EF {
         point.iter().map(|&x| EF::from(x)).sum()
     }
 }
@@ -33,6 +33,7 @@ impl<F: p3_field::Field, EF: p3_field::ExtensionField<F>> sumcheck::SumcheckComp
         point: &[<F as p3_field::Field>::Packing],
         _: &[EF],
         _: &[Vec<F>],
+        _: &[<F as p3_field::Field>::Packing],
     ) -> impl Iterator<Item = EF> + Send + Sync {
         use p3_field::PackedValue;
         point
@@ -90,6 +91,8 @@ fn test_end_to_end_prove_verify() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     // Verify
@@ -136,6 +139,8 @@ fn test_end_to_end_various_degrees() {
             None,
             SumcheckGrinding::None,
             None,
+            &[],
+            &[],
         );
 
         let mut verifier_state = VerifierState::new(
@@ -195,6 +200,8 @@ fn test_end_to_end_multiple_multilinears() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -240,6 +247,8 @@ fn test_end_to_end_with_univariate_skip() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -281,6 +290,8 @@ fn test_end_to_end_with_grinding() {
         None,
         SumcheckGrinding::Auto { security_bits: 128 },
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -327,6 +338,8 @@ fn test_end_to_end_zerocheck() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(

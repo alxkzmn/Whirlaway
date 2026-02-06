@@ -22,7 +22,7 @@ struct SimpleSumComputation;
 impl<F: p3_field::Field, NF: p3_field::ExtensionField<F>, EF: p3_field::ExtensionField<NF>>
     sumcheck::SumcheckComputation<F, NF, EF> for SimpleSumComputation
 {
-    fn eval(&self, point: &[NF], _: &[EF]) -> EF {
+    fn eval(&self, point: &[NF], _: &[EF], _: &[NF]) -> EF {
         point.iter().map(|&x| EF::from(x)).sum()
     }
 }
@@ -35,6 +35,7 @@ impl<F: p3_field::Field, EF: ExtensionField<F> + TwoAdicField>
         point: &[<F as p3_field::Field>::Packing],
         _: &[EF],
         _: &[Vec<F>],
+        _: &[<F as p3_field::Field>::Packing],
     ) -> impl Iterator<Item = EF> + Send + Sync {
         use p3_field::PackedValue;
         point
@@ -92,6 +93,8 @@ fn test_basic_sumcheck_single_round() {
         None, // n_rounds
         SumcheckGrinding::None,
         None, // missing_mul_factor
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -136,6 +139,8 @@ fn test_multi_round_sumcheck() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -181,6 +186,8 @@ fn test_univariate_skip() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -228,6 +235,8 @@ fn test_zerocheck_mode() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -272,6 +281,8 @@ fn test_with_grinding() {
         None,
         SumcheckGrinding::Auto { security_bits: 128 },
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -322,6 +333,8 @@ fn test_with_eq_factor() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     // Create eq_factor
@@ -345,6 +358,8 @@ fn test_with_eq_factor() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     // The generic verifier doesn't support the eq_factor-weighted variant, but we can still
@@ -394,6 +409,8 @@ fn test_multiple_multilinears() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -439,6 +456,8 @@ fn test_single_variable() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(
@@ -484,6 +503,8 @@ fn test_higher_degree() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let mut verifier_state = VerifierState::new(

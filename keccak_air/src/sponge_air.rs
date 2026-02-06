@@ -133,6 +133,9 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for KeccakSpongeAir {
         let local_keccak: &KeccakCols<AB::Var> = local_row[..NUM_KECCAK_COLS].borrow();
         let next_keccak: &KeccakCols<AB::Var> = next_row[..NUM_KECCAK_COLS].borrow();
 
+        let first_row_sel = local_keccak.first_row_sel.clone().into();
+        let transition_sel = local_keccak.transition_sel.clone().into();
+
         let local_hash_end = local_row[HASH_END_IDX].clone().into();
         let local_seen_end = local_row[SEEN_END_IDX].clone().into();
         let next_seen_end = next_row[SEEN_END_IDX].clone().into();
@@ -147,18 +150,18 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for KeccakSpongeAir {
         assert_bool_like(builder, local_active.clone());
 
         // First row: seen_end = 0, active = 1.
-        builder.when_first_row().assert_zero(local_seen_end.clone());
-        builder.when_first_row().assert_one(local_active.clone());
+        builder.when(first_row_sel.clone()).assert_zero(local_seen_end.clone());
+        builder.when(first_row_sel.clone()).assert_one(local_active.clone());
 
         // Transition:
         // seen_end_next = seen_end + hash_end  (ensures exactly one hash_end if last row has seen_end=1)
         // active_next = active - hash_end      (drops to 0 immediately after hash_end row)
-        builder
-            .when_transition()
-            .assert_zero(next_seen_end.clone() - (local_seen_end.clone() + local_hash_end.clone()));
-        builder
-            .when_transition()
-            .assert_zero(next_active.clone() - (local_active.clone() - local_hash_end.clone()));
+        builder.when(transition_sel.clone()).assert_zero(
+            next_seen_end.clone() - (local_seen_end.clone() + local_hash_end.clone()),
+        );
+        builder.when(transition_sel.clone()).assert_zero(
+            next_active.clone() - (local_active.clone() - local_hash_end.clone()),
+        );
 
         // hash_end may only happen while active.
         builder
@@ -172,7 +175,9 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for KeccakSpongeAir {
             .assert_zero(AB::Expr::ONE - local_final_step.clone());
 
         // Last row: seen_end must be 1.
-        builder.when_last_row().assert_one(local_seen_end.clone());
+        builder
+            .when(AB::Expr::ONE - transition_sel.clone())
+            .assert_one(local_seen_end.clone());
 
         // Enforce out_bits decomposition only on final-step rows while active.
         // Also force out_bits to 0 on non-final-step rows to avoid unconstrained witness.
@@ -269,9 +274,44 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for KeccakSpongeAir {
 
             let lhs = next_input_bit(x, y, z);
             builder
-                .when_transition()
+                .when(transition_sel.clone())
                 .when(boundary_gate.clone())
                 .assert_zero(lhs - rhs);
+        }
+
+        // Zero-IV constraint: On the very first row, the sponge initial state must be
+        // block_bits (rate) / 0 (capacity).  This enforces the standard sponge IV = 0.
+        //
+        // We recover each input bit A[y,x,z] = A' XOR C XOR C' (same trick as absorb chaining)
+        // and check it against block_bits[i] for rate bits, or 0 for capacity bits.
+        {
+            let local_block_bits = &local_row[BLOCK_BITS_START..BLOCK_BITS_START + RATE_BITS];
+
+            let local_input_bit = |x: usize, y: usize, z: usize| -> AB::Expr {
+                let a_prime: AB::Expr = local_keccak.a_prime[y][x][z].clone().into();
+                let c: AB::Expr = local_keccak.c[x][z].clone().into();
+                let c_prime: AB::Expr = local_keccak.c_prime[x][z].clone().into();
+                xor3(two.clone(), a_prime, c, c_prime)
+            };
+
+            for bit_idx in 0..STATE_BITS {
+                let lane = bit_idx / 64;
+                let z = bit_idx % 64;
+                let x = lane % 5;
+                let y = lane / 5;
+
+                let input = local_input_bit(x, y, z);
+
+                let expected = if bit_idx < RATE_BITS {
+                    local_block_bits[bit_idx].clone().into()
+                } else {
+                    AB::Expr::ZERO
+                };
+
+                builder
+                    .when(first_row_sel.clone())
+                    .assert_zero(input - expected);
+            }
         }
 
         // Enforce block bits are boolean at the start of each permutation (step_flags[0] == 1).
@@ -292,7 +332,7 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for KeccakSpongeAir {
             let local_block_bits = &local_row[BLOCK_BITS_START..BLOCK_BITS_START + RATE_BITS];
             let next_block_bits = &next_row[BLOCK_BITS_START..BLOCK_BITS_START + RATE_BITS];
             builder
-                .when_transition()
+                .when(transition_sel.clone())
                 .when(not_final_step)
                 .assert_zeros::<RATE_BITS, _>(core::array::from_fn(|i| {
                     local_block_bits[i].clone().into() - next_block_bits[i].clone().into()

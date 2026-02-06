@@ -15,6 +15,7 @@ use crate::{AirSettings, WHIR_POW_BITS};
 pub struct AirTable<F: Field, EF, A> {
     pub log_length: usize,
     pub n_columns: usize,
+    pub num_public_values: usize,
     pub air: A,
     pub preprocessed_columns: Vec<EvaluationsList<F>>, // TODO 'sparse' preprocessed columns (with non zero values at cylic shifts)
     pub n_constraints: usize,
@@ -35,16 +36,18 @@ where
         univariate_skips: usize,
         preprocessed_columns: Vec<EvaluationsList<F>>,
         constraint_degree: usize,
+        num_public_values: usize,
     ) -> Self
     where
         A: Air<SymbolicAirBuilder<F>>,
     {
-        let symbolic_constraints = get_symbolic_constraints(&air, 0, 0);
+        let symbolic_constraints = get_symbolic_constraints(&air, 0, num_public_values);
         let n_constraints = symbolic_constraints.len();
 
         Self {
             log_length,
             n_columns: air.width(),
+            num_public_values,
             air,
             preprocessed_columns,
             n_constraints,

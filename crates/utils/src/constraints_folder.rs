@@ -1,4 +1,4 @@
-use p3_air::AirBuilder;
+use p3_air::{AirBuilder, AirBuilderWithPublicValues};
 use p3_field::{ExtensionField, Field};
 use p3_matrix::dense::RowMajorMatrixView;
 
@@ -10,6 +10,7 @@ where
     EF: ExtensionField<NF>,
 {
     pub main: RowMajorMatrixView<'a, NF>,
+    pub public_values: &'a [NF],
     pub alpha_powers: &'a [EF],
     pub accumulator: EF,
     pub constraint_index: usize,
@@ -62,5 +63,18 @@ where
             self.accumulator += alpha_power * item.into();
         });
         self.constraint_index += N;
+    }
+}
+
+impl<'a, F, NF, EF> AirBuilderWithPublicValues for ConstraintFolder<'a, F, NF, EF>
+where
+    F: Field,
+    NF: ExtensionField<F>,
+    EF: ExtensionField<NF>,
+{
+    type PublicVar = NF;
+
+    fn public_values(&self) -> &[Self::PublicVar] {
+        self.public_values
     }
 }

@@ -32,3 +32,4 @@ tracing-subscriber.workspace = true
 
 [features]
 parallel = ["p3-maybe-rayon/parallel"]
+test-utils = []
