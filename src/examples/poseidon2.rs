@@ -102,7 +102,7 @@ pub fn prove_poseidon2(
     let mut verifier_time = Duration::ZERO;
     if verify_enabled {
         let time = Instant::now();
-        verify(&prepared, &proof).unwrap();
+        verify(&prepared, &proof, &[]).unwrap();
         verifier_time = time.elapsed();
     }
 

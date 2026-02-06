@@ -70,7 +70,7 @@ fn bench(c: &mut Criterion) {
                 prove(&prepared, &inputs)
             },
             |proof| {
-                verify(&prepared, &proof).unwrap();
+                verify(&prepared, &proof, &[]).unwrap();
             },
             criterion::BatchSize::SmallInput,
         );

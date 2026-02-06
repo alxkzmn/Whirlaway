@@ -2,7 +2,8 @@ use p3_air::Air;
 use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger};
 use p3_dft::Radix2Bowers;
 use p3_field::{
-    BasedVectorSpace, ExtensionField, Field, Packable, TwoAdicField, cyclic_subgroup_known_order,
+    BasedVectorSpace, ExtensionField, Field, Packable, PackedValue, TwoAdicField,
+    cyclic_subgroup_known_order,
 };
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
 use serde::{Deserialize, Serialize};
@@ -77,6 +78,7 @@ where
         merkle_hash: H,
         merkle_compress: C,
         prover_state: &mut ProverState<F, EF, Challenger>,
+        public_values: &[F],
         witness: Vec<EvaluationsList<F>>,
     ) -> WhirProof<F, EF, W, DIGEST_ELEMS>
     where
@@ -97,6 +99,12 @@ where
         );
         let log_length = self.log_length;
         assert!(witness.iter().all(|w| w.num_variables() == log_length));
+        assert_eq!(public_values.len(), self.num_public_values);
+        let public_values_packed = public_values
+            .iter()
+            .copied()
+            .map(|value| F::Packing::from_fn(|_| value))
+            .collect::<Vec<_>>();
 
         let whir_params = self.build_whir_params(settings, merkle_hash, merkle_compress);
 
@@ -173,6 +181,8 @@ where
                         security_bits: settings.security_bits,
                     },
                     None,
+                    public_values,
+                    &public_values_packed,
                 )
             });
 
@@ -260,6 +270,8 @@ where
                 security_bits: settings.security_bits,
             },
             None,
+            &[],
+            &[],
         );
 
         let final_point = [columns_batching_scalars.clone(), inner_challenges].concat();
@@ -291,7 +303,7 @@ where
 pub struct InnerSumcheckCircuit;
 
 impl<F: Field, EF: ExtensionField<F>> SumcheckComputation<F, EF, EF> for InnerSumcheckCircuit {
-    fn eval(&self, point: &[EF], _: &[EF]) -> EF {
+    fn eval(&self, point: &[EF], _: &[EF], _: &[EF]) -> EF {
         point[0] * point[1]
     }
 }
@@ -302,6 +314,7 @@ impl<F: Field, EF: ExtensionField<F>> SumcheckComputationPacked<F, EF> for Inner
         _: &[<F as Field>::Packing],
         _: &[EF],
         _: &[Vec<F>],
+        _: &[<F as Field>::Packing],
     ) -> impl Iterator<Item = EF> + Send + Sync {
         // Unreachable
         std::iter::once(EF::ZERO)

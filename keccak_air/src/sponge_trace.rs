@@ -70,6 +70,23 @@ fn digest_from_state(state: &[u64; 25]) -> [u8; 32] {
 pub fn generate_sponge_trace_and_digest_limbs<F: PrimeField64>(
     message: &[u8],
 ) -> (RowMajorMatrix<F>, [u16; DIGEST_LIMBS]) {
+    generate_sponge_trace_inner(message, [0u64; 25])
+}
+
+/// Same as [`generate_sponge_trace_and_digest_limbs`] but with a caller-chosen initial state.
+/// Useful for testing that the zero-IV constraint rejects non-standard IVs.
+#[cfg(any(test, feature = "test-utils"))]
+pub fn generate_sponge_trace_with_iv<F: PrimeField64>(
+    message: &[u8],
+    initial_state: [u64; 25],
+) -> (RowMajorMatrix<F>, [u16; DIGEST_LIMBS]) {
+    generate_sponge_trace_inner(message, initial_state)
+}
+
+fn generate_sponge_trace_inner<F: PrimeField64>(
+    message: &[u8],
+    initial_state: [u64; 25],
+) -> (RowMajorMatrix<F>, [u16; DIGEST_LIMBS]) {
     // Sponge simulation: absorb padded blocks, record permutation inputs, record outputs.
     let padded = keccak_pad10star1(message.to_vec());
     debug_assert_eq!(padded.len() % RATE_BYTES, 0);
@@ -79,7 +96,7 @@ pub fn generate_sponge_trace_and_digest_limbs<F: PrimeField64>(
     let mut block_bits: Vec<[u8; RATE_BITS]> = Vec::with_capacity(num_blocks);
     let mut perm_outputs: Vec<[u64; 25]> = Vec::with_capacity(num_blocks);
 
-    let mut state = [0u64; 25];
+    let mut state = initial_state;
     for b in 0..num_blocks {
         let block: &[u8; RATE_BYTES] = padded[b * RATE_BYTES..(b + 1) * RATE_BYTES]
             .try_into()

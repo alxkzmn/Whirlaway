@@ -7,9 +7,9 @@ use tracing_forest::ForestLayer;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 use whir_p3::parameters::FoldingFactor;
 
-use crate::circuits::keccak256::Keccak256Circuit;
+use crate::circuits::keccak256::{Keccak256Circuit, Keccak256Input};
 use crate::hashers::KECCAK_DIGEST_ELEMS;
-use crate::proving_system::{KeccakProvingSystemConfig, prepare, proof_size, prove, verify};
+use crate::proving_system::{Circuit, KeccakProvingSystemConfig, prepare, proof_size, prove, verify};
 
 // BabyBear
 // type F = BabyBear;
@@ -104,7 +104,7 @@ pub fn prove_keccak(
 
     let mut rng = StdRng::seed_from_u64(0);
 
-    let inputs: Vec<u8> = (0..message_len).map(|_| rng.random()).collect();
+    let message: Vec<u8> = (0..message_len).map(|_| rng.random()).collect();
 
     let proving_settings = KeccakProvingSystemConfig {
         air_settings: settings.clone(),
@@ -118,7 +118,15 @@ pub fn prove_keccak(
 
     let prepared =
         prepare::<Keccak256Circuit, _, KECCAK_DIGEST_ELEMS>(&proving_settings, keccak_air_circuit);
-    let proof = prove(&prepared, &inputs);
+    let (_trace, digest_limbs) = keccak_air::generate_sponge_trace_and_digest_limbs::<
+        crate::circuits::keccak256::F,
+    >(&message);
+    let input = Keccak256Input {
+        message,
+        digest_limbs,
+    };
+    let public_values = Keccak256Circuit::public_values(&prepared.circuit, &input);
+    let proof = prove(&prepared, &input);
 
     let prover_time = t.elapsed();
     let verify_enabled = std::env::var("VERIFY")
@@ -127,7 +135,7 @@ pub fn prove_keccak(
     let mut verifier_time = Duration::ZERO;
     if verify_enabled {
         let time = Instant::now();
-        verify(&prepared, &proof).unwrap();
+        verify(&prepared, &proof, &public_values).unwrap();
         verifier_time = time.elapsed();
     }
 

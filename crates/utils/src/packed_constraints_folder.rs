@@ -1,4 +1,4 @@
-use p3_air::AirBuilder;
+use p3_air::{AirBuilder, AirBuilderWithPublicValues};
 use p3_field::BasedVectorSpace;
 use p3_field::PackedField;
 use p3_field::{ExtensionField, Field};
@@ -7,6 +7,7 @@ use p3_matrix::dense::RowMajorMatrixView;
 #[derive(Debug)]
 pub struct ConstraintFolderPacked<'a, F: Field, EF: ExtensionField<F>> {
     pub main: RowMajorMatrixView<'a, F::Packing>,
+    pub public_values: &'a [F::Packing],
     pub alpha_powers: &'a [EF],
     pub decomposed_alpha_powers: &'a [Vec<F>],
     pub accumulator: <EF as ExtensionField<F>>::ExtensionPacking,
@@ -61,5 +62,15 @@ impl<'a, F: Field, EF: ExtensionField<F>> AirBuilder for ConstraintFolderPacked<
                 F::Packing::packed_linear_combination::<N>(alpha_powers, &expr_array)
             });
         self.constraint_index += N;
+    }
+}
+
+impl<'a, F: Field, EF: ExtensionField<F>> AirBuilderWithPublicValues
+    for ConstraintFolderPacked<'a, F, EF>
+{
+    type PublicVar = F::Packing;
+
+    fn public_values(&self) -> &[Self::PublicVar] {
+        self.public_values
     }
 }

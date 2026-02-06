@@ -20,7 +20,7 @@ struct SimpleSumComputation;
 impl<F: p3_field::Field, NF: p3_field::ExtensionField<F>, EF: p3_field::ExtensionField<NF>>
     sumcheck::SumcheckComputation<F, NF, EF> for SimpleSumComputation
 {
-    fn eval(&self, point: &[NF], _: &[EF]) -> EF {
+    fn eval(&self, point: &[NF], _: &[EF], _: &[NF]) -> EF {
         point.iter().map(|&x| EF::from(x)).sum()
     }
 }
@@ -33,6 +33,7 @@ impl<F: p3_field::Field, EF: p3_field::ExtensionField<F>> sumcheck::SumcheckComp
         point: &[<F as p3_field::Field>::Packing],
         _: &[EF],
         _: &[Vec<F>],
+        _: &[<F as p3_field::Field>::Packing],
     ) -> impl Iterator<Item = EF> + Send + Sync {
         use p3_field::PackedValue;
         // Sum all packed elements
@@ -88,6 +89,8 @@ fn test_sumcheck_with_pcs_commitment_flow() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     // Verify sumcheck
@@ -129,6 +132,8 @@ fn test_sumcheck_complex_multi_round() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let challenger2 = setup_challenger();
@@ -170,6 +175,8 @@ fn test_sumcheck_with_univariate_skip() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let challenger2 = setup_challenger();
@@ -209,6 +216,8 @@ fn test_sumcheck_with_grinding() {
         None,
         SumcheckGrinding::Auto { security_bits: 128 },
         None,
+        &[],
+        &[],
     );
 
     let challenger2 = setup_challenger();
@@ -264,6 +273,8 @@ fn test_sumcheck_multiple_multilinears() {
         None,
         SumcheckGrinding::None,
         None,
+        &[],
+        &[],
     );
 
     let challenger2 = setup_challenger();

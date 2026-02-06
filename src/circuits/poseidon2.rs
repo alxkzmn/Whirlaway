@@ -85,7 +85,8 @@ impl Circuit<8> for Poseidon2Circuit {
             preprocessed.log_length,
             settings.univariate_skips,
             Vec::new(),
-            3,
+            5,
+            0,
         )
     }
 

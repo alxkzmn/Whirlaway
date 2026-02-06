@@ -34,9 +34,30 @@ pub(crate) fn eval_round_flags<AB: AirBuilder>(builder: &mut AB) {
     let local: &KeccakCols<AB::Var> = (*local).borrow();
     let next: &KeccakCols<AB::Var> = (*next).borrow();
 
+    // Constrain selector columns to be boolean and match boundary behavior.
+    let first_row_sel = local.first_row_sel.clone().into();
+    let transition_sel = local.transition_sel.clone().into();
+    assert_bool_like(builder, first_row_sel.clone());
+    assert_bool_like(builder, transition_sel.clone());
+
+    // Enforce step flags are boolean and exactly one is active per row.
+    let mut step_sum = AB::Expr::ZERO;
+    for flag in local.step_flags.iter() {
+        let flag_expr: AB::Expr = flag.clone().into();
+        assert_bool_like(builder, flag_expr.clone());
+        step_sum += flag_expr;
+    }
+    builder.assert_zero(step_sum - AB::Expr::ONE);
+
+    // transition_sel can only be 0 on a final-step row.
+    let final_step = local.step_flags[NUM_ROUNDS_MIN_1].clone().into();
+    builder.assert_zero((AB::Expr::ONE - transition_sel.clone()) * (AB::Expr::ONE - final_step));
+
+    // first_row_sel is never set on rows that do not transition.
+    builder.assert_zero(first_row_sel.clone() * (AB::Expr::ONE - transition_sel.clone()));
+
     // Initially, the first step flag should be 1 while the others should be 0.
     // Constraint: In the first row, the first flag is 1; elsewhere this gate is 0.
-    let first_row_sel = local.first_row_sel.clone().into();
     let one = AB::Expr::from_bool(true);
     builder.assert_zero(first_row_sel.clone() * (local.step_flags[0].clone() - one));
     // Constraint: In the first row, all other flags are 0.
@@ -49,11 +70,14 @@ pub(crate) fn eval_round_flags<AB: AirBuilder>(builder: &mut AB) {
     // Formally, for each flag i in the local row, it should equal the next row's flag at (i + 1) mod NUM_ROUNDS.
     //
     // This ensures that exactly one flag "moves forward" each step in a cyclic manner.
-    let trans_sel = local.transition_sel.clone().into();
     builder.assert_zeros::<NUM_ROUNDS, _>(array::from_fn(|i| {
-        trans_sel.clone()
+        transition_sel.clone()
             * (local.step_flags[i].clone() - next.step_flags[(i + 1) % NUM_ROUNDS].clone())
     }));
+}
+
+fn assert_bool_like<AB: AirBuilder>(builder: &mut AB, x: AB::Expr) {
+    builder.assert_zero(x.clone() * (x - AB::Expr::ONE));
 }
 
 /// Clone a slice into an array of fixed length N by element-wise cloning.

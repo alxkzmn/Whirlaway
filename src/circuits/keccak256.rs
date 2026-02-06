@@ -1,11 +1,11 @@
 use air::AirSettings;
 use air::table::AirTable;
 use keccak_air::{
-    KeccakAir, NUM_KECCAK_COLS, NUM_ROUNDS, RATE_BYTES, generate_sponge_trace_and_digest_limbs,
+    DIGEST_LIMBS, KeccakSpongeAir, NUM_ROUNDS, RATE_BYTES, generate_sponge_trace_and_digest_limbs,
 };
 use p3_challenger::{HashChallenger, SerializingChallenger32};
 use p3_field::extension::BinomialExtensionField;
-use p3_field::{ExtensionField, PrimeField64, TwoAdicField};
+use p3_field::{ExtensionField, PrimeCharacteristicRing, PrimeField64, TwoAdicField};
 use p3_keccak::Keccak256Hash;
 use p3_koala_bear::KoalaBear;
 use p3_matrix::Matrix;
@@ -47,22 +47,17 @@ fn log_length_for_message_len(message_len: usize) -> usize {
 
 fn trace_from_message(message: &[u8]) -> RowMajorMatrix<F> {
     let (full_trace, _digest_limbs) = generate_sponge_trace_and_digest_limbs::<F>(message);
-    let height = full_trace.height();
-    let mut values = Vec::with_capacity(height * NUM_KECCAK_COLS);
-    for row in 0..height {
-        let row_slice = full_trace.row_slice(row).expect("trace row missing");
-        values.extend_from_slice(&row_slice[..NUM_KECCAK_COLS]);
-    }
-    RowMajorMatrix::new(values, NUM_KECCAK_COLS)
+    full_trace
 }
 
-fn make_table(log_length: usize, settings: &AirSettings) -> AirTable<F, EF, KeccakAir> {
+fn make_table(log_length: usize, settings: &AirSettings) -> AirTable<F, EF, KeccakSpongeAir> {
     AirTable::<F, EF, _>::new(
-        KeccakAir {},
+        KeccakSpongeAir::new(),
         log_length,
         settings.univariate_skips,
         Vec::new(),
-        3,
+        6,
+        DIGEST_LIMBS,
     )
 }
 
@@ -71,15 +66,21 @@ pub struct Keccak256Circuit {
     pub input_size: usize,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Keccak256Input {
+    pub message: Vec<u8>,
+    pub digest_limbs: [u16; DIGEST_LIMBS],
+}
+
 impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
     type F = F;
     type EF = EF;
-    type Air = KeccakAir;
+    type Air = KeccakSpongeAir;
 
     type W = u64;
 
     type Preprocessed = Keccak256Preprocessed;
-    type Input = Vec<u8>; // message bytes
+    type Input = Keccak256Input;
 
     fn preprocess(&self, _settings: &AirSettings) -> Self::Preprocessed {
         let log_length = log_length_for_message_len(self.input_size);
@@ -100,15 +101,23 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
         preprocessed: &Self::Preprocessed,
         input: &Self::Input,
     ) -> Vec<EvaluationsList<Self::F>> {
-        debug_assert_eq!(input.len(), preprocessed.input_size);
+        debug_assert_eq!(input.message.len(), preprocessed.input_size);
 
-        let trace = trace_from_message(input);
+        let trace = trace_from_message(&input.message);
         debug_assert_eq!(trace.height(), 1 << preprocessed.log_length);
 
         let witness_matrix = trace.transpose();
         witness_matrix
             .rows()
             .map(|col| EvaluationsList::new(col.collect()))
+            .collect()
+    }
+
+    fn public_values(_preprocessed: &Self::Preprocessed, input: &Self::Input) -> Vec<Self::F> {
+        input
+            .digest_limbs
+            .iter()
+            .map(|&limb| F::from_u16(limb))
             .collect()
     }
 }

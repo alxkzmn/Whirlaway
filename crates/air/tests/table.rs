@@ -19,6 +19,7 @@ fn test_air_table_new() {
         univariate_skips,
         preprocessed,
         constraint_degree,
+        0,
     );
 
     assert_eq!(table.log_length, log_length);
@@ -35,7 +36,7 @@ fn test_air_table_column_counting() {
     let log_length = 4;
     let preprocessed = create_preprocessed_columns(log_length, 2);
 
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, 1);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, 1, 0);
 
     assert_eq!(table.n_columns, 5);
     assert_eq!(table.n_preprocessed_columns(), 2);
@@ -54,6 +55,7 @@ fn test_air_table_no_preprocessed() {
         1,
         vec![], // No preprocessed columns
         1,
+        0,
     );
 
     assert_eq!(table.n_preprocessed_columns(), 0);
@@ -67,7 +69,7 @@ fn test_air_table_build_whir_params() {
     let log_length = 3;
     let preprocessed = create_preprocessed_columns(log_length, 1);
 
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, 1);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, 1, 0);
 
     let settings = AirSettings::new(
         128,
@@ -100,6 +102,7 @@ fn test_air_table_different_settings() {
         2, // univariate_skips = 2
         vec![],
         2, // constraint_degree = 2
+        0,
     );
 
     assert_eq!(table.constraint_degree, 2);
@@ -111,7 +114,7 @@ fn test_air_table_large_width() {
     let air = MockAir::new(16);
     let log_length = 5;
 
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 1);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 1, 0);
 
     assert_eq!(table.n_columns, 16);
     assert_eq!(table.n_witness_columns(), 16);
@@ -125,7 +128,7 @@ fn test_air_table_preprocessed_columns() {
     let n_preprocessed = 3;
     let preprocessed = create_preprocessed_columns(log_length, n_preprocessed);
 
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, 1);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, 1, 0);
 
     assert_eq!(table.n_preprocessed_columns(), n_preprocessed);
     assert_eq!(table.n_witness_columns(), 6 - n_preprocessed);
@@ -138,7 +141,7 @@ fn test_air_table_univariate_selectors() {
     let log_length = 2;
 
     for skips in [1, 2, 3] {
-        let table = AirTable::<F, EF, _>::new(air.clone(), log_length, skips, vec![], 1);
+        let table = AirTable::<F, EF, _>::new(air.clone(), log_length, skips, vec![], 1, 0);
 
         // Should have 2^skips selectors
         assert_eq!(table.univariate_selectors.len(), 1 << skips);

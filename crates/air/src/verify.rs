@@ -57,6 +57,7 @@ impl<
         merkle_hash: H,
         merkle_compress: C,
         verifier_state: &mut VerifierState<F, EF, Challenger>,
+        public_values: &[F],
         log_length: usize,
         whir_proof: &WhirProof<F, EF, W, DIGEST_ELEMS>,
     ) -> Result<(), AirVerifError>
@@ -71,6 +72,12 @@ impl<
         F: Eq + Packable,
         F::Packing: Eq + Send + Sync,
     {
+        assert_eq!(public_values.len(), self.num_public_values);
+        let public_values_ext = public_values
+            .iter()
+            .copied()
+            .map(EF::from)
+            .collect::<Vec<_>>();
         let whir_params = self.build_whir_params(settings, merkle_hash, merkle_compress);
 
         let commitment_reader = CommitmentReader::new(&whir_params);
@@ -153,6 +160,7 @@ impl<
             &global_point,
             &cyclic_subgroup_known_order(constraints_batching_scalar, self.n_constraints)
                 .collect::<Vec<_>>(),
+            &public_values_ext,
         );
 
         let zerocheck_selector_evals = self

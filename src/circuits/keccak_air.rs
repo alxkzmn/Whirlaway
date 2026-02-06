@@ -61,6 +61,7 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for KeccakAirCircuit {
             settings.univariate_skips,
             Vec::new(),
             3,
+            0,
         )
     }
 

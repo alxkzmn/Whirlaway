@@ -46,7 +46,7 @@ fn test_sumcheck_computation_trait() {
 
     let alpha_powers = vec![EF::ONE];
 
-    let result = SumcheckComputation::eval(&air, &point, &alpha_powers);
+    let result = SumcheckComputation::eval(&air, &point, &alpha_powers, &[]);
 
     // SimpleAir: accumulator = alpha[0] * (row0col0 + row0col1)
     let expected = alpha_powers[0] * (point[0] + point[1]);
@@ -91,7 +91,7 @@ fn test_sumcheck_computation_with_multiple_constraints() {
 
     let alpha_powers = vec![EF::ONE, EF::ONE];
 
-    let result = SumcheckComputation::eval(&air, &point, &alpha_powers);
+    let result = SumcheckComputation::eval(&air, &point, &alpha_powers, &[]);
 
     // MultiConstraintAir: accumulator = alpha[0] * row0col0 + alpha[1] * row0col1
     let expected = alpha_powers[0] * point[0] + alpha_powers[1] * point[1];
@@ -106,7 +106,7 @@ fn test_sumcheck_computation_with_alpha_powers() {
     // SimpleAir uses exactly one constraint, so only alpha_powers[0] is used.
     let alpha_powers = vec![EF::from(F::new(2))];
 
-    let result = SumcheckComputation::eval(&air, &point, &alpha_powers);
+    let result = SumcheckComputation::eval(&air, &point, &alpha_powers, &[]);
 
     let expected = alpha_powers[0] * (point[0] + point[1]);
     assert_eq!(result, expected);
@@ -127,7 +127,7 @@ fn test_sumcheck_computation_extension_field() {
 
     let alpha_powers = vec![EF::ONE];
 
-    let result = SumcheckComputation::eval(&air, &point, &alpha_powers);
+    let result = SumcheckComputation::eval(&air, &point, &alpha_powers, &[]);
 
     let expected = alpha_powers[0] * (point[0] + point[1]);
     assert_eq!(result, expected);
@@ -143,7 +143,7 @@ fn test_sumcheck_computation_zero_result() {
 
     let alpha_powers = vec![EF::ONE];
 
-    let result = SumcheckComputation::eval(&air, &point, &alpha_powers);
+    let result = SumcheckComputation::eval(&air, &point, &alpha_powers, &[]);
 
     // First row sums to zero, so the constraint evaluates to zero.
     assert_eq!(result, EF::ZERO);
@@ -173,6 +173,7 @@ fn test_sumcheck_computation_packed() {
         &point,
         &alpha_powers,
         &decomposed_alpha_powers,
+        &[],
     )
     .collect();
 
@@ -192,7 +193,7 @@ fn test_sumcheck_computation_with_constraint_folder() {
     let alpha_powers = vec![EF::ONE];
 
     // This should work the same as the trait method
-    let result = SumcheckComputation::eval(&air, &point, &alpha_powers);
+    let result = SumcheckComputation::eval(&air, &point, &alpha_powers, &[]);
 
     let expected = alpha_powers[0] * (point[0] + point[1]);
     assert_eq!(result, expected);
