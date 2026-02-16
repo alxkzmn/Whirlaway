@@ -1,5 +1,5 @@
 use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
-use rand::{RngCore, rng};
+use rand::{Rng, rng};
 use std::time::Duration;
 use utils::{fold_multilinear_in_large_field, fold_multilinear_in_small_field};
 use whir_p3::poly::evals::EvaluationsList;

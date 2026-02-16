@@ -25,3 +25,11 @@ GPU: 1M poseidon2 / s (RTX 4090) -> switch to branch [gpu](https://github.com/To
 
 - [Plonky3](https://github.com/Plonky3/Plonky3) for its finite field crates and poseidon2 AIR arithmetization (`src/examples/poseidon2_koala_bear`).
 - [whir-p3](https://github.com/tcoratger/whir-p3): a Plonky3-compatible WHIR implementation
+
+## Development notes
+
+- Recommended project-level validation command:
+
+```bash
+cargo test --all-features --all-targets
+```

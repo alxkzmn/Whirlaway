@@ -1,7 +1,7 @@
 use air::AirSettings;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use p3_keccak::Keccak256Hash;
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use whir_p3::{parameters::FoldingFactor, parameters::errors::SecurityAssumption};
 
 use whirlaway::circuits::keccak_air::{
