@@ -18,8 +18,11 @@ use whir_p3::parameters::ProtocolParameters;
 use whir_p3::{
     poly::{evals::EvaluationsList, multilinear::MultilinearPoint},
     whir::{
-        committer::writer::CommitmentWriter, constraints::statement::EqStatement,
-        parameters::InitialPhaseConfig, proof::WhirProof, prover::Prover,
+        committer::writer::CommitmentWriter,
+        constraints::statement::{EqStatement, initial::InitialStatement},
+        parameters::SumcheckStrategy,
+        proof::WhirProof,
+        prover::Prover,
     },
 };
 
@@ -120,7 +123,6 @@ where
         let dft = Radix2Bowers;
 
         let proof_params = ProtocolParameters {
-            initial_phase_config: InitialPhaseConfig::WithStatementClassic,
             security_level: settings.security_bits,
             pow_bits: crate::WHIR_POW_BITS,
             folding_factor: settings.whir_folding_factor,
@@ -134,12 +136,14 @@ where
             &proof_params,
             whir_params.num_variables,
         );
+        let mut statement =
+            whir_params.initial_statement(packed_pol.clone(), SumcheckStrategy::Classic);
         let packed_witness = committer
             .commit::<_, F, W, W, DIGEST_ELEMS>(
                 &dft,
                 &mut whir_proof,
                 prover_state.challenger_mut(),
-                packed_pol,
+                &mut statement,
             )
             .unwrap();
 
@@ -283,15 +287,19 @@ where
         std::mem::drop(_span);
 
         let prover = Prover(&whir_params);
+        let final_point = MultilinearPoint::new(final_point);
+        let mut final_statement = EqStatement::initialize(final_point.num_variables());
+        final_statement.add_evaluated_constraint(final_point, packed_value);
+        final_statement.concatenate(&statement.normalize());
 
-        let mut statement = EqStatement::initialize(final_point.len());
-        statement.add_evaluated_constraint(MultilinearPoint::new(final_point), packed_value);
+        let statement = InitialStatement::from_eq_statement(packed_pol, final_statement);
+
         prover
             .prove::<_, F, W, W, DIGEST_ELEMS>(
                 &dft,
                 &mut whir_proof,
                 prover_state.challenger_mut(),
-                statement,
+                &statement,
                 packed_witness,
             )
             .unwrap();

@@ -18,7 +18,7 @@ p3-util.workspace = true
 p3-keccak.workspace = true
 p3-symmetric.workspace = true
 
-rand = { workspace = true, features = ["small_rng"] }
+rand.workspace = true
 tracing.workspace = true
 
 [dev-dependencies]

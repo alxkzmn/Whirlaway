@@ -1,6 +1,6 @@
 use ::air::AirSettings;
 use p3_poseidon2_air::RoundConstants;
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use std::fmt;
 use std::time::{Duration, Instant};
 use tracing::level_filters::LevelFilter;

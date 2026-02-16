@@ -5,9 +5,7 @@ use p3_field::{ExtensionField, Field, TwoAdicField};
 use p3_uni_stark::{SymbolicAirBuilder, get_symbolic_constraints};
 use utils::{DensePolynomial, log2_up, univariate_selectors};
 use whir_p3::{
-    parameters::ProtocolParameters,
-    poly::evals::EvaluationsList,
-    whir::parameters::{InitialPhaseConfig, WhirConfig},
+    parameters::ProtocolParameters, poly::evals::EvaluationsList, whir::parameters::WhirConfig,
 };
 
 use crate::{AirSettings, WHIR_POW_BITS};
@@ -83,7 +81,6 @@ where
     {
         let num_variables = self.log_length + self.log_n_witness_columns();
         let whir_params = ProtocolParameters {
-            initial_phase_config: InitialPhaseConfig::WithStatementClassic,
             security_level: settings.security_bits,
             pow_bits: WHIR_POW_BITS,
             folding_factor: settings.whir_folding_factor,

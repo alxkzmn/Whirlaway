@@ -2,8 +2,8 @@ use core::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, BaseAirWithPublicValues};
 use p3_field::PrimeCharacteristicRing;
-use p3_matrix::horizontally_truncated::HorizontallyTruncated;
 use p3_matrix::Matrix;
+use p3_matrix::horizontally_truncated::HorizontallyTruncated;
 
 use crate::{KeccakAir, KeccakCols, NUM_KECCAK_COLS, NUM_ROUNDS_MIN_1, U64_LIMBS};
 
@@ -150,18 +150,22 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for KeccakSpongeAir {
         assert_bool_like(builder, local_active.clone());
 
         // First row: seen_end = 0, active = 1.
-        builder.when(first_row_sel.clone()).assert_zero(local_seen_end.clone());
-        builder.when(first_row_sel.clone()).assert_one(local_active.clone());
+        builder
+            .when(first_row_sel.clone())
+            .assert_zero(local_seen_end.clone());
+        builder
+            .when(first_row_sel.clone())
+            .assert_one(local_active.clone());
 
         // Transition:
         // seen_end_next = seen_end + hash_end  (ensures exactly one hash_end if last row has seen_end=1)
         // active_next = active - hash_end      (drops to 0 immediately after hash_end row)
-        builder.when(transition_sel.clone()).assert_zero(
-            next_seen_end.clone() - (local_seen_end.clone() + local_hash_end.clone()),
-        );
-        builder.when(transition_sel.clone()).assert_zero(
-            next_active.clone() - (local_active.clone() - local_hash_end.clone()),
-        );
+        builder
+            .when(transition_sel.clone())
+            .assert_zero(next_seen_end.clone() - (local_seen_end.clone() + local_hash_end.clone()));
+        builder
+            .when(transition_sel.clone())
+            .assert_zero(next_active.clone() - (local_active.clone() - local_hash_end.clone()));
 
         // hash_end may only happen while active.
         builder
@@ -294,7 +298,7 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for KeccakSpongeAir {
                 xor3(two.clone(), a_prime, c, c_prime)
             };
 
-            for bit_idx in 0..STATE_BITS {
+            for (bit_idx, local_block_bit) in local_block_bits.iter().enumerate().take(STATE_BITS) {
                 let lane = bit_idx / 64;
                 let z = bit_idx % 64;
                 let x = lane % 5;
@@ -303,7 +307,7 @@ impl<AB: AirBuilderWithPublicValues> Air<AB> for KeccakSpongeAir {
                 let input = local_input_bit(x, y, z);
 
                 let expected = if bit_idx < RATE_BITS {
-                    local_block_bits[bit_idx].clone().into()
+                    local_block_bit.clone().into()
                 } else {
                     AB::Expr::ZERO
                 };

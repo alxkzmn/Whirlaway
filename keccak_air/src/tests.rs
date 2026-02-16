@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
-use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
 
 use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
@@ -22,7 +22,7 @@ use upstream::NUM_ROUNDS as UPSTREAM_NUM_ROUNDS;
 fn traces_match_for_random_inputs() {
     type F = p3_goldilocks::Goldilocks;
 
-    let mut rng = SmallRng::seed_from_u64(1);
+    let mut rng = StdRng::seed_from_u64(1);
 
     // Generate a few permutations (multiple of 24 rows needed by upstream design)
     let num_perms = 8usize; // small for test speed
