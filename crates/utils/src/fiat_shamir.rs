@@ -132,4 +132,14 @@ where
             Err(ProofError::InvalidGrindingWitness)
         }
     }
+
+    #[must_use]
+    pub const fn is_fully_consumed(&self) -> bool {
+        self.cursor == self.proof_data.len()
+    }
+
+    #[must_use]
+    pub const fn remaining_proof_data_len(&self) -> usize {
+        self.proof_data.len().saturating_sub(self.cursor)
+    }
 }
