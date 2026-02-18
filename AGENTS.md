@@ -18,8 +18,10 @@ This repository is a Rust workspace implementing a hash-based SNARK. Most “int
 
 ### `whir-p3` parameter landmines (panics / UB)
 
-- **Univariate skip > 1 is currently unsafe**: enabling `univariate_skips > 1` has been observed to trigger _undefined behavior_ in the underlying `whir-p3` sumcheck path. Keep tests using `univariate_skips = 1` unless/until upstream is fixed.
-  - If you see tests constrained to `[1]` with a UB comment, it’s intentional.
+- **Univariate skip is now resolved by mode**:
+  - `AirSettings` supports `UnivariateSkipMode::Manual { skip }` and `UnivariateSkipMode::Auto { ... }`.
+  - The resolved skip count is committed into transcript proof data and checked by the verifier.
+  - For stable regression tests, prefer manual mode with an explicit `skip`.
 - **`TooLarge(...)` panics**: some `AirSettings` / WHIR parameters are validated tightly and will panic if set too aggressively. In this repo’s tests we converged on settings that reliably work for `KoalaBear`:
   - Folding factor kept moderate (commonly `(4, 4)`).
   - `whir_initial_domain_reduction_factor` kept moderate (commonly `4`).

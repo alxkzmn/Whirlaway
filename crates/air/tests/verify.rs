@@ -82,7 +82,7 @@ fn test_air_verify_invalid_selectors() {
     }
 
     let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], constraint_degree, 0);
 
     let settings = create_test_settings();
     let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, columns);
@@ -117,7 +117,7 @@ fn test_air_verify_invalid_selectors() {
 fn test_air_verify_basic() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
     let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], constraint_degree, 0);
 
     let settings = create_test_settings();
     let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
@@ -155,7 +155,7 @@ fn test_air_verify_with_preprocessed() {
     let witness = all_cols;
     let constraint_degree =
         get_max_constraint_degree_extension::<F, EF, _>(&air, preprocessed.len(), 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, preprocessed, constraint_degree, 0);
 
     let settings = create_test_settings();
     let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
@@ -190,7 +190,7 @@ fn test_air_verify_with_preprocessed() {
 fn test_air_verify_invalid_proof() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
     let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], constraint_degree, 0);
 
     let settings = create_test_settings();
     let (_proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
@@ -232,7 +232,7 @@ fn test_air_verify_corrupted_proof() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
 
     let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], constraint_degree, 0);
 
     let settings = create_test_settings();
     let (mut proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
@@ -271,7 +271,7 @@ fn test_air_verify_corrupted_proof() {
 fn test_air_verify_different_settings() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
     let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], constraint_degree, 0);
 
     let settings = create_test_settings();
     let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
@@ -306,9 +306,9 @@ fn test_air_verify_different_settings() {
 #[test]
 fn test_air_verify_larger_table() {
     let (air, log_length, witness) = create_keccak_witness_columns(2, 0);
-    // Keep univariate_skips=1; skips>1 currently triggers UB in whir-p3.
+    // Use explicit manual skip=1 for deterministic regression behavior.
     let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], constraint_degree, 0);
 
     let settings = create_test_settings();
     let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);
@@ -344,7 +344,7 @@ fn test_air_verify_wrong_log_length() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
 
     let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], constraint_degree, 0);
 
     let settings = create_test_settings();
     let (proof_data, whir_proof) = prove_and_get_proof_data(&table, &settings, witness);

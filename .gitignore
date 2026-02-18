@@ -3,3 +3,4 @@
 /crates/cuda-engine/kernels/build/*
 flamegraph.svg
 profile.json.gz
+**/.DS_Store

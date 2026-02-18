@@ -34,7 +34,7 @@ fn test_pcs_commitment_creation() {
     let witness = create_witness_columns(log_length, n_columns);
 
     let air = MockAir::new(n_columns);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 1, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 1, 0);
 
     let settings = create_pcs_settings();
     let merkle_hash = setup_merkle_hash();
@@ -81,7 +81,7 @@ fn test_pcs_commitment_parsing() {
     let witness = create_witness_columns(log_length, n_columns);
 
     let air = MockAir::new(n_columns);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 1, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 1, 0);
 
     let settings = create_pcs_settings();
     let merkle_hash = setup_merkle_hash();
@@ -134,7 +134,7 @@ fn test_pcs_opening_proof() {
     let witness = create_witness_columns(log_length, n_columns);
 
     let air = MockAir::new(n_columns);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 1, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 1, 0);
 
     let settings = create_pcs_settings();
     let merkle_hash = setup_merkle_hash();
@@ -213,7 +213,7 @@ fn test_pcs_invalid_opening() {
     let witness = create_witness_columns(log_length, n_columns);
 
     let air = MockAir::new(n_columns);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 1, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 1, 0);
 
     let settings = create_pcs_settings();
     let merkle_hash = setup_merkle_hash();
@@ -299,7 +299,7 @@ fn test_pcs_multiple_evaluations() {
     let witness = create_witness_columns(log_length, n_columns);
 
     let air = MockAir::new(n_columns);
-    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 1, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 1, 0);
 
     let settings = create_pcs_settings();
     let merkle_hash = setup_merkle_hash();
@@ -387,7 +387,7 @@ fn test_pcs_different_polynomial_sizes() {
         let witness = create_witness_columns(log_length, n_columns);
 
         let air = MockAir::new(n_columns);
-        let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 1, 0);
+        let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 1, 0);
 
         let settings = create_pcs_settings();
         let merkle_hash = setup_merkle_hash();

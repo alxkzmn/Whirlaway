@@ -40,10 +40,9 @@ fn sponge_nonzero_iv_rejected() {
         generate_sponge_trace_with_iv::<whirlaway::circuits::keccak256::F>(&message, bad_iv);
 
     // Also generate the correct digest for comparison.
-    let (_good_trace, good_digest_limbs) =
-        keccak_air::generate_sponge_trace_and_digest_limbs::<whirlaway::circuits::keccak256::F>(
-            &message,
-        );
+    let (_good_trace, good_digest_limbs) = keccak_air::generate_sponge_trace_and_digest_limbs::<
+        whirlaway::circuits::keccak256::F,
+    >(&message);
 
     // Sanity: the two digests must differ (non-zero IV ⇒ different output).
     assert_ne!(
