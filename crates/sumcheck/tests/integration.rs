@@ -1,7 +1,7 @@
 use p3_challenger::DuplexChallenger;
 use p3_field::{PrimeCharacteristicRing, extension::BinomialExtensionField};
 use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use sumcheck::{SumcheckGrinding, prove, verify, verify_with_univariate_skip};
 use utils::fiat_shamir::{ProverState, VerifierState};
 use whir_p3::{
@@ -222,7 +222,6 @@ fn test_end_to_end_multiple_multilinears() {
 }
 
 #[test]
-#[ignore = "Univariate skip path triggers UB in current whir-p3"]
 fn test_end_to_end_with_univariate_skip() {
     let n_vars = 5;
     let skips = 2;

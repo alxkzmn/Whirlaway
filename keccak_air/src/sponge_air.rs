@@ -2,8 +2,8 @@ use core::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, AirBuilderWithPublicValues, BaseAir, BaseAirWithPublicValues};
 use p3_field::PrimeCharacteristicRing;
-use p3_matrix::Matrix;
 use p3_matrix::horizontally_truncated::HorizontallyTruncated;
+use p3_matrix::Matrix;
 
 use crate::{KeccakAir, KeccakCols, NUM_KECCAK_COLS, NUM_ROUNDS_MIN_1, U64_LIMBS};
 

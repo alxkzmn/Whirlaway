@@ -51,11 +51,10 @@ fn trace_from_message(message: &[u8]) -> RowMajorMatrix<F> {
     full_trace
 }
 
-fn make_table(log_length: usize, settings: &AirSettings) -> AirTable<F, EF, KeccakSpongeAir> {
+fn make_table(log_length: usize, _settings: &AirSettings) -> AirTable<F, EF, KeccakSpongeAir> {
     AirTable::<F, EF, _>::new(
         KeccakSpongeAir::new(),
         log_length,
-        settings.univariate_skips,
         Vec::new(),
         6,
         DIGEST_LIMBS,

@@ -1,6 +1,6 @@
 use p3_air::Air;
 use p3_challenger::{FieldChallenger, GrindingChallenger};
-use p3_field::{ExtensionField, Field, TwoAdicField};
+use p3_field::{ExtensionField, Field, PackedValue, TwoAdicField};
 
 use p3_uni_stark::{SymbolicAirBuilder, get_symbolic_constraints};
 use utils::{DensePolynomial, log2_up, univariate_selectors};
@@ -8,7 +8,7 @@ use whir_p3::{
     parameters::ProtocolParameters, poly::evals::EvaluationsList, whir::parameters::WhirConfig,
 };
 
-use crate::{AirSettings, WHIR_POW_BITS};
+use crate::{AirSettings, UnivariateSkipMode, WHIR_POW_BITS};
 
 pub struct AirTable<F: Field, EF, A> {
     pub log_length: usize,
@@ -18,7 +18,6 @@ pub struct AirTable<F: Field, EF, A> {
     pub preprocessed_columns: Vec<EvaluationsList<F>>, // TODO 'sparse' preprocessed columns (with non zero values at cylic shifts)
     pub n_constraints: usize,
     pub constraint_degree: usize,
-    pub univariate_selectors: Vec<DensePolynomial<F>>,
 
     _phantom: std::marker::PhantomData<EF>,
 }
@@ -31,7 +30,6 @@ where
     pub fn new(
         air: A,
         log_length: usize,
-        univariate_skips: usize,
         preprocessed_columns: Vec<EvaluationsList<F>>,
         constraint_degree: usize,
         num_public_values: usize,
@@ -50,7 +48,6 @@ where
             preprocessed_columns,
             n_constraints,
             constraint_degree,
-            univariate_selectors: univariate_selectors(univariate_skips),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -68,6 +65,85 @@ where
     #[allow(clippy::missing_const_for_fn)]
     pub fn n_preprocessed_columns(&self) -> usize {
         self.preprocessed_columns.len()
+    }
+
+    pub fn resolve_univariate_skips(&self, settings: &AirSettings) -> usize {
+        let max_supported = self.max_supported_univariate_skips();
+        match settings.univariate_skip_mode {
+            UnivariateSkipMode::Manual { skip } => {
+                assert!(
+                    skip > 0 && skip <= max_supported,
+                    "invalid manual univariate skip: skip={skip}, max_supported={max_supported}"
+                );
+                skip
+            }
+            UnivariateSkipMode::Auto {
+                max_skip,
+                max_first_round_coeffs,
+            } => {
+                if max_supported == 0 {
+                    return 0;
+                }
+                let max_try = max_supported.min(max_skip.max(1));
+                for skips in (1..=max_try).rev() {
+                    if self.first_round_coeff_count(skips) <= max_first_round_coeffs {
+                        return skips;
+                    }
+                }
+                1
+            }
+        }
+    }
+
+    pub fn validate_resolved_univariate_skips(
+        &self,
+        settings: &AirSettings,
+        resolved_skips: usize,
+    ) -> bool {
+        let max_supported = self.max_supported_univariate_skips();
+        if resolved_skips == 0 || resolved_skips > max_supported {
+            return false;
+        }
+        match settings.univariate_skip_mode {
+            UnivariateSkipMode::Manual { skip } => resolved_skips == skip,
+            UnivariateSkipMode::Auto {
+                max_skip,
+                max_first_round_coeffs,
+            } => {
+                resolved_skips <= max_skip.max(1)
+                    && self.first_round_coeff_count(resolved_skips) <= max_first_round_coeffs
+            }
+        }
+    }
+
+    pub fn selector_polynomials(&self, univariate_skips: usize) -> Vec<DensePolynomial<F>> {
+        univariate_selectors(univariate_skips)
+    }
+
+    fn max_supported_univariate_skips(&self) -> usize {
+        if self.log_length == 0 {
+            return 0;
+        }
+        // A skip value `k` collapses the first `k` Boolean variables into a size-`2^k`
+        // univariate domain for the first sumcheck round. `k` must satisfy all of:
+        // - table size: we cannot skip more variables than exist (`k <= log_length`);
+        // - field structure: the protocol needs a 2^k-sized multiplicative subgroup in `F`,
+        //   so `k` cannot exceed `F::TWO_ADICITY`;
+        // - packed evaluation layout: we keep at least `log2(Packing::WIDTH)` suffix
+        //   variables after skipping so packed chunks remain well-formed.
+        // The effective limit is the most restrictive of these bounds.
+        let max_by_log = self.log_length;
+        let max_by_field = F::TWO_ADICITY;
+        let pack_bits = log2_up(F::Packing::WIDTH);
+        let max_by_pack = self.log_length.saturating_sub(pack_bits).max(1);
+        max_by_log.min(max_by_field).min(max_by_pack)
+    }
+
+    fn first_round_coeff_count(&self, skips: usize) -> usize {
+        let domain_size = 1usize.checked_shl(skips as u32).unwrap_or(usize::MAX);
+        (self.constraint_degree + 1)
+            .saturating_mul(domain_size.saturating_sub(1))
+            .saturating_add(1)
     }
 
     pub fn build_whir_params<H, C, Challenger>(

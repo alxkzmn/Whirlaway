@@ -1,9 +1,15 @@
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+
 use p3_challenger::DuplexChallenger;
 use p3_field::{
-    ExtensionField, PrimeCharacteristicRing, TwoAdicField, extension::BinomialExtensionField,
+    ExtensionField, PackedValue, PrimeCharacteristicRing, TwoAdicField,
+    extension::BinomialExtensionField,
 };
 use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use sumcheck::{SumcheckGrinding, prove, verify, verify_with_univariate_skip};
 use utils::fiat_shamir::{ProverState, VerifierState};
 use whir_p3::{
@@ -52,6 +58,56 @@ impl<F: p3_field::Field, EF: ExtensionField<F> + TwoAdicField>
     }
 }
 
+#[derive(Clone, Default)]
+struct CountingSumComputation {
+    scalar_calls: Arc<AtomicUsize>,
+    packed_calls: Arc<AtomicUsize>,
+}
+
+impl CountingSumComputation {
+    fn scalar_call_count(&self) -> usize {
+        self.scalar_calls.load(Ordering::Relaxed)
+    }
+
+    fn packed_call_count(&self) -> usize {
+        self.packed_calls.load(Ordering::Relaxed)
+    }
+}
+
+impl<F: p3_field::Field, NF: p3_field::ExtensionField<F>, EF: p3_field::ExtensionField<NF>>
+    sumcheck::SumcheckComputation<F, NF, EF> for CountingSumComputation
+{
+    fn eval(&self, point: &[NF], _: &[EF], _: &[NF]) -> EF {
+        self.scalar_calls.fetch_add(1, Ordering::Relaxed);
+        point.iter().copied().map(EF::from).sum()
+    }
+}
+
+impl<F: p3_field::Field, EF: ExtensionField<F> + TwoAdicField>
+    sumcheck::SumcheckComputationPacked<F, EF> for CountingSumComputation
+{
+    fn eval_packed(
+        &self,
+        point: &[<F as p3_field::Field>::Packing],
+        _: &[EF],
+        _: &[Vec<F>],
+        _: &[<F as p3_field::Field>::Packing],
+    ) -> impl Iterator<Item = EF> + Send + Sync {
+        use p3_field::PackedValue;
+
+        self.packed_calls.fetch_add(1, Ordering::Relaxed);
+        (0..<F as p3_field::Field>::Packing::WIDTH)
+            .map(|lane| {
+                point
+                    .iter()
+                    .map(|value| EF::from(value.as_slice()[lane]))
+                    .sum::<EF>()
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+    }
+}
+
 fn setup_challenger() -> MyChallenger {
     let mut rng = StdRng::seed_from_u64(42);
     let poseidon = Poseidon16::new_from_rng_128(&mut rng);
@@ -66,6 +122,10 @@ fn create_simple_multilinear(n_vars: usize) -> EvaluationsList<F> {
 
 fn create_zero_multilinear(n_vars: usize) -> EvaluationsList<F> {
     EvaluationsList::new(vec![F::ZERO; 1 << n_vars])
+}
+
+fn lift_multilinear_to_extension(m: &EvaluationsList<F>) -> EvaluationsList<EF> {
+    EvaluationsList::new(m.as_slice().iter().copied().map(EF::from).collect())
 }
 
 #[test]
@@ -523,4 +583,199 @@ fn test_higher_degree() {
     let expected_value =
         multilinear.evaluate_hypercube_base::<EF>(&MultilinearPoint::new(eval.point.clone()));
     assert_eq!(eval.value, expected_value);
+}
+
+#[test]
+fn test_nf_equals_f_uses_packed_path_when_width_aligned() {
+    let width = <F as p3_field::Field>::Packing::WIDTH;
+    let Some(n_vars) = (1..20).find(|&n| (1usize << (n - 1)).is_multiple_of(width)) else {
+        return;
+    };
+
+    let multilinear = create_simple_multilinear(n_vars);
+    let expected_sum: EF = multilinear.as_slice().iter().copied().map(EF::from).sum();
+    let computation = CountingSumComputation::default();
+
+    let challenger = setup_challenger();
+    let domain_separator = DomainSeparator::new(vec![]);
+    let mut prover_state = ProverState::new(&domain_separator, challenger);
+
+    let _ = prove(
+        1,
+        &[&multilinear],
+        &computation,
+        1,
+        &[EF::ONE],
+        None,
+        false,
+        &mut prover_state,
+        expected_sum,
+        None,
+        SumcheckGrinding::None,
+        None,
+        &[],
+        &[],
+    );
+
+    assert!(computation.packed_call_count() > 0);
+}
+
+#[test]
+fn test_nf_equals_f_falls_back_to_scalar_when_not_width_aligned() {
+    let width = <F as p3_field::Field>::Packing::WIDTH;
+    let Some(n_vars) = (1..20).find(|&n| !(1usize << (n - 1)).is_multiple_of(width)) else {
+        // If no such n exists, packing width is itself a power of two and every hypercube size aligns.
+        return;
+    };
+
+    let multilinear = create_simple_multilinear(n_vars);
+    let expected_sum: EF = multilinear.as_slice().iter().copied().map(EF::from).sum();
+    let computation = CountingSumComputation::default();
+
+    let challenger = setup_challenger();
+    let domain_separator = DomainSeparator::new(vec![]);
+    let mut prover_state = ProverState::new(&domain_separator, challenger);
+
+    let _ = prove(
+        1,
+        &[&multilinear],
+        &computation,
+        1,
+        &[EF::ONE],
+        None,
+        false,
+        &mut prover_state,
+        expected_sum,
+        None,
+        SumcheckGrinding::None,
+        None,
+        &[],
+        &[],
+    );
+
+    assert!(computation.scalar_call_count() > 0);
+    assert_eq!(computation.packed_call_count(), 0);
+}
+
+#[test]
+fn test_zerocheck_fast_path_case_nf_equals_f_skips_gt_one() {
+    let width = <F as p3_field::Field>::Packing::WIDTH;
+    let skips = 2;
+    let Some(n_vars) = (skips..20).find(|&n| (1usize << (n - skips)).is_multiple_of(width)) else {
+        return;
+    };
+
+    let multilinear = create_zero_multilinear(n_vars);
+    let computation = CountingSumComputation::default();
+
+    let challenger = setup_challenger();
+    let domain_separator = DomainSeparator::new(vec![]);
+    let mut prover_state = ProverState::new(&domain_separator, challenger);
+
+    let _ = prove(
+        skips,
+        &[&multilinear],
+        &computation,
+        2,
+        &[EF::ONE],
+        None,
+        true,
+        &mut prover_state,
+        EF::ZERO,
+        Some(1),
+        SumcheckGrinding::None,
+        None,
+        &[],
+        &[],
+    );
+
+    assert!(computation.packed_call_count() > 0);
+}
+
+#[test]
+fn test_zerocheck_fast_path_fallback_when_nf_not_f() {
+    let skips = 2;
+    let n_vars = 4;
+    let multilinear = lift_multilinear_to_extension(&create_zero_multilinear(n_vars));
+    let computation = CountingSumComputation::default();
+
+    let challenger = setup_challenger();
+    let domain_separator = DomainSeparator::new(vec![]);
+    let mut prover_state = ProverState::new(&domain_separator, challenger);
+
+    let _ = prove(
+        skips,
+        &[&multilinear],
+        &computation,
+        2,
+        &[EF::ONE],
+        None,
+        true,
+        &mut prover_state,
+        EF::ZERO,
+        Some(1),
+        SumcheckGrinding::None,
+        None,
+        &[],
+        &[],
+    );
+
+    assert!(computation.scalar_call_count() > 0);
+    assert_eq!(computation.packed_call_count(), 0);
+}
+
+#[test]
+fn test_zerocheck_fast_path_matches_generic_fallback_transcript() {
+    let width = <F as p3_field::Field>::Packing::WIDTH;
+    let skips = 2;
+    let Some(n_vars) = (skips..20).find(|&n| (1usize << (n - skips)).is_multiple_of(width)) else {
+        return;
+    };
+
+    let multilinear_f = create_zero_multilinear(n_vars);
+    let multilinear_ef = lift_multilinear_to_extension(&multilinear_f);
+    let domain_separator = DomainSeparator::new(vec![]);
+
+    let mut prover_state_fast = ProverState::new(&domain_separator, setup_challenger());
+    let (challenges_fast, _, final_sum_fast) = prove(
+        skips,
+        &[&multilinear_f],
+        &SimpleSumComputation,
+        2,
+        &[EF::ONE],
+        None,
+        true,
+        &mut prover_state_fast,
+        EF::ZERO,
+        Some(1),
+        SumcheckGrinding::None,
+        None,
+        &[],
+        &[],
+    );
+
+    let mut prover_state_fallback = ProverState::new(&domain_separator, setup_challenger());
+    let (challenges_fallback, _, final_sum_fallback) = prove(
+        skips,
+        &[&multilinear_ef],
+        &SimpleSumComputation,
+        2,
+        &[EF::ONE],
+        None,
+        true,
+        &mut prover_state_fallback,
+        EF::ZERO,
+        Some(1),
+        SumcheckGrinding::None,
+        None,
+        &[],
+        &[],
+    );
+
+    assert_eq!(challenges_fast, challenges_fallback);
+    assert_eq!(final_sum_fast, final_sum_fallback);
+    assert_eq!(
+        prover_state_fast.proof_data(),
+        prover_state_fallback.proof_data()
+    );
 }
