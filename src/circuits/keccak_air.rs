@@ -53,9 +53,16 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for KeccakAirCircuit {
 
     fn make_table(
         preprocessed: &Self::Preprocessed,
-        _settings: &AirSettings,
+        settings: &AirSettings,
     ) -> AirTable<Self::F, Self::EF, Self::Air> {
-        AirTable::<F, EF, _>::new(KeccakAir {}, preprocessed.log_length, Vec::new(), 3, 0)
+        AirTable::<F, EF, _>::new(
+            KeccakAir {},
+            preprocessed.log_length,
+            settings.univariate_skips,
+            Vec::new(),
+            3,
+            0,
+        )
     }
 
     fn build_witness(

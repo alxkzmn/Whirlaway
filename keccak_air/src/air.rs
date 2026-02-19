@@ -3,15 +3,15 @@ use core::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir};
 use p3_field::{PrimeCharacteristicRing, PrimeField64};
-use p3_matrix::dense::RowMajorMatrix;
 use p3_matrix::Matrix;
+use p3_matrix::dense::RowMajorMatrix;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 
 use crate::columns::{KeccakCols, NUM_KECCAK_COLS};
 use crate::constants::rc_value_bit;
 use crate::round_flags::eval_round_flags;
-use crate::{generate_trace_rows, BITS_PER_LIMB, NUM_ROUNDS, NUM_ROUNDS_MIN_1, U64_LIMBS};
+use crate::{BITS_PER_LIMB, NUM_ROUNDS, NUM_ROUNDS_MIN_1, U64_LIMBS, generate_trace_rows};
 
 /// Assumes the field size is at least 16 bits.
 #[derive(Debug)]

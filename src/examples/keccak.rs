@@ -9,9 +9,7 @@ use whir_p3::parameters::FoldingFactor;
 
 use crate::circuits::keccak256::{Keccak256Circuit, Keccak256Input};
 use crate::hashers::KECCAK_DIGEST_ELEMS;
-use crate::proving_system::{
-    Circuit, KeccakProvingSystemConfig, prepare, proof_size, prove, verify,
-};
+use crate::proving_system::{Circuit, KeccakProvingSystemConfig, prepare, proof_size, prove, verify};
 use sha3::Digest;
 
 // BabyBear

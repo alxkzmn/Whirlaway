@@ -1,4 +1,4 @@
-use air::{AirSettings, UnivariateSkipMode};
+use air::AirSettings;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use p3_keccak::Keccak256Hash;
 use rand::{RngExt, SeedableRng, rngs::StdRng};
@@ -14,12 +14,12 @@ fn bench(c: &mut Criterion) {
     let mut group = c.benchmark_group("whirlaway_keccak_proof");
     group.sample_size(10);
 
-    let settings = AirSettings::new_with_skip_mode(
+    let settings = AirSettings::new(
         128,
         SecurityAssumption::CapacityBound,
         FoldingFactor::ConstantFromSecondRound(7, 4),
         1,
-        UnivariateSkipMode::auto(6, 4096),
+        4,
         5,
     );
 

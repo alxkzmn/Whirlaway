@@ -5,4 +5,3 @@ pub mod hashers;
 pub mod proving_system;
 
 pub use air::AirSettings;
-pub use air::UnivariateSkipMode;

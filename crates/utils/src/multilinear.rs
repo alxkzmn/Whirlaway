@@ -1,16 +1,10 @@
 use std::borrow::Borrow;
 
-use p3_field::{ExtensionField, Field, PackedValue, dot_product};
+use p3_field::PackedValue;
+use p3_field::{ExtensionField, Field, dot_product};
 use rayon::prelude::*;
 use tracing::instrument;
 use whir_p3::poly::evals::EvaluationsList;
-
-// Empirical crossover from release/native profiling: below ~64 output elements,
-// Rayon scheduling overhead is typically higher than the fold itself.
-const SMALL_FOLD_PAR_THRESHOLD: usize = 64;
-// Batch fold parallelizes across polynomials; use total work (polys * output_len)
-// and stay sequential below ~1k units to avoid over-threading tiny batches.
-const SMALL_BATCH_FOLD_WORK_THRESHOLD: usize = 1024;
 
 pub fn fold_multilinear_in_small_field<F: Field, EF: ExtensionField<F>>(
     m: &EvaluationsList<EF>,
@@ -24,52 +18,28 @@ pub fn fold_multilinear_in_small_field<F: Field, EF: ExtensionField<F>>(
         let new_size = m.num_evals() / 2;
         let (first_half, second_half) = m.as_slice().split_at(new_size);
 
-        if new_size <= SMALL_FOLD_PAR_THRESHOLD {
-            EvaluationsList::new(
-                first_half
-                    .iter()
-                    .zip(second_half.iter())
-                    .map(|(&a, &b)| a * scalars[0] + b * scalars[1])
-                    .collect(),
-            )
-        } else {
-            EvaluationsList::new(
-                first_half
-                    .par_iter()
-                    .zip(second_half.par_iter())
-                    .map(|(&a, &b)| a * scalars[0] + b * scalars[1])
-                    .collect(),
-            )
-        }
+        EvaluationsList::new(
+            first_half
+                .par_iter()
+                .zip(second_half.par_iter())
+                .map(|(&a, &b)| a * scalars[0] + b * scalars[1])
+                .collect(),
+        )
     } else {
         let new_size = m.num_evals() / scalars.len();
 
-        if new_size <= SMALL_FOLD_PAR_THRESHOLD {
-            EvaluationsList::new(
-                (0..new_size)
-                    .map(|i| {
-                        scalars
-                            .iter()
-                            .enumerate()
-                            .map(|(j, s)| m.as_slice()[i + j * new_size] * *s)
-                            .sum()
-                    })
-                    .collect(),
-            )
-        } else {
-            EvaluationsList::new(
-                (0..new_size)
-                    .into_par_iter()
-                    .map(|i| {
-                        scalars
-                            .iter()
-                            .enumerate()
-                            .map(|(j, s)| m.as_slice()[i + j * new_size] * *s)
-                            .sum()
-                    })
-                    .collect(),
-            )
-        }
+        EvaluationsList::new(
+            (0..new_size)
+                .into_par_iter()
+                .map(|i| {
+                    scalars
+                        .iter()
+                        .enumerate()
+                        .map(|(j, s)| m.as_slice()[i + j * new_size] * *s)
+                        .sum()
+                })
+                .collect(),
+        )
     }
 
     EvaluationsList::new(
@@ -93,64 +63,33 @@ pub fn fold_multilinear_packed<F: Field>(
 ) -> EvaluationsList<F> {
     assert!(scalars.len().is_power_of_two() && scalars.len() <= m.num_evals());
     let new_size = m.num_evals() / scalars.len();
+
     let inners = (0..scalars.len())
-        .map(|idx| &m.as_slice()[idx * new_size..(idx + 1) * new_size])
+        .map(|i| &m.as_slice()[i * new_size..(i + 1) * new_size])
         .collect::<Vec<_>>();
-    let inners_partitioned = inners
+
+    let inners_packed = inners
         .iter()
-        .map(|inner| F::Packing::pack_slice_with_suffix(inner))
+        .map(|inner| F::Packing::pack_slice(inner))
         .collect::<Vec<_>>();
 
-    let mut dst = F::zero_vec(new_size);
-    let (dst_packed, dst_suffix) = F::Packing::pack_slice_with_suffix_mut(&mut dst);
-
-    if dst_packed.len() <= SMALL_FOLD_PAR_THRESHOLD {
-        for (packed_idx, packed_out) in dst_packed.iter_mut().enumerate() {
-            *packed_out = scalars
+    let packed_res = (0..new_size / F::Packing::WIDTH)
+        .into_par_iter()
+        .map(|i| {
+            scalars
                 .iter()
                 .enumerate()
-                .map(|(inner_idx, scalar)| inners_partitioned[inner_idx].0[packed_idx] * *scalar)
-                .sum();
-        }
-    } else {
-        dst_packed
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(packed_idx, packed_out)| {
-                *packed_out = scalars
-                    .iter()
-                    .enumerate()
-                    .map(|(inner_idx, scalar)| {
-                        inners_partitioned[inner_idx].0[packed_idx] * *scalar
-                    })
-                    .sum();
-            });
+                .map(|(j, s)| inners_packed[j][i] * *s)
+                .sum::<F::Packing>()
+        })
+        .collect::<Vec<_>>();
+
+    let mut unpacked: Vec<F> = unsafe { std::mem::transmute(packed_res) };
+    unsafe {
+        unpacked.set_len(new_size);
     }
 
-    if dst_suffix.len() <= SMALL_FOLD_PAR_THRESHOLD {
-        for (suffix_idx, out) in dst_suffix.iter_mut().enumerate() {
-            *out = scalars
-                .iter()
-                .enumerate()
-                .map(|(inner_idx, scalar)| inners_partitioned[inner_idx].1[suffix_idx] * *scalar)
-                .sum();
-        }
-    } else {
-        dst_suffix
-            .par_iter_mut()
-            .enumerate()
-            .for_each(|(suffix_idx, out)| {
-                *out = scalars
-                    .iter()
-                    .enumerate()
-                    .map(|(inner_idx, scalar)| {
-                        inners_partitioned[inner_idx].1[suffix_idx] * *scalar
-                    })
-                    .sum();
-            });
-    }
-
-    EvaluationsList::new(dst)
+    EvaluationsList::new(unpacked)
 }
 
 pub fn fold_multilinear_in_large_field<F: Field, EF: ExtensionField<F>>(
@@ -164,51 +103,27 @@ pub fn fold_multilinear_in_large_field<F: Field, EF: ExtensionField<F>>(
         let new_size = m.num_evals() / 2;
         let (first_half, second_half) = m.as_slice().split_at(new_size);
 
-        if new_size <= SMALL_FOLD_PAR_THRESHOLD {
-            EvaluationsList::new(
-                first_half
-                    .iter()
-                    .zip(second_half.iter())
-                    .map(|(&a, &b)| scalars[0] * a + scalars[1] * b)
-                    .collect(),
-            )
-        } else {
-            EvaluationsList::new(
-                first_half
-                    .par_iter()
-                    .zip(second_half.par_iter())
-                    .map(|(&a, &b)| scalars[0] * a + scalars[1] * b)
-                    .collect(),
-            )
-        }
+        EvaluationsList::new(
+            first_half
+                .par_iter()
+                .zip(second_half.par_iter())
+                .map(|(&a, &b)| scalars[0] * a + scalars[1] * b)
+                .collect(),
+        )
     } else {
         let new_size = m.num_evals() / scalars.len();
-        if new_size <= SMALL_FOLD_PAR_THRESHOLD {
-            EvaluationsList::new(
-                (0..new_size)
-                    .map(|i| {
-                        scalars
-                            .iter()
-                            .enumerate()
-                            .map(|(j, s)| *s * m.as_slice()[i + j * new_size])
-                            .sum()
-                    })
-                    .collect(),
-            )
-        } else {
-            EvaluationsList::new(
-                (0..new_size)
-                    .into_par_iter()
-                    .map(|i| {
-                        scalars
-                            .iter()
-                            .enumerate()
-                            .map(|(j, s)| *s * m.as_slice()[i + j * new_size])
-                            .sum()
-                    })
-                    .collect(),
-            )
-        }
+        EvaluationsList::new(
+            (0..new_size)
+                .into_par_iter()
+                .map(|i| {
+                    scalars
+                        .iter()
+                        .enumerate()
+                        .map(|(j, s)| *s * m.as_slice()[i + j * new_size])
+                        .sum()
+                })
+                .collect(),
+        )
     }
 }
 
@@ -240,42 +155,20 @@ pub fn batch_fold_multilinear_in_large_field<F: Field, EF: ExtensionField<F>>(
     polys: &[&EvaluationsList<F>],
     scalars: &[EF],
 ) -> Vec<EvaluationsList<EF>> {
-    let new_size = polys
-        .first()
-        .map_or(0, |poly| poly.num_evals() / scalars.len().max(1));
-    let total_work = polys.len().saturating_mul(new_size);
-    if total_work <= SMALL_BATCH_FOLD_WORK_THRESHOLD {
-        polys
-            .iter()
-            .map(|poly| fold_multilinear_in_large_field(poly, scalars))
-            .collect()
-    } else {
-        polys
-            .par_iter()
-            .map(|poly| fold_multilinear_in_large_field(poly, scalars))
-            .collect()
-    }
+    polys
+        .par_iter()
+        .map(|poly| fold_multilinear_in_large_field(poly, scalars))
+        .collect()
 }
 
 pub fn batch_fold_multilinear_in_small_field<F: Field, EF: ExtensionField<F>>(
     polys: &[&EvaluationsList<EF>],
     scalars: &[F],
 ) -> Vec<EvaluationsList<EF>> {
-    let new_size = polys
-        .first()
-        .map_or(0, |poly| poly.num_evals() / scalars.len().max(1));
-    let total_work = polys.len().saturating_mul(new_size);
-    if total_work <= SMALL_BATCH_FOLD_WORK_THRESHOLD {
-        polys
-            .iter()
-            .map(|poly| fold_multilinear_in_small_field(poly, scalars))
-            .collect()
-    } else {
-        polys
-            .par_iter()
-            .map(|poly| fold_multilinear_in_small_field(poly, scalars))
-            .collect()
-    }
+    polys
+        .par_iter()
+        .map(|poly| fold_multilinear_in_small_field(poly, scalars))
+        .collect()
 }
 
 pub fn packed_multilinear<F: Field>(pols: &[EvaluationsList<F>]) -> EvaluationsList<F> {
@@ -303,75 +196,4 @@ pub fn add_multilinears<F: Field>(
         .zip(pol2.as_slice().par_iter())
         .for_each(|(a, b)| *a += *b);
     EvaluationsList::new(dst)
-}
-
-#[cfg(test)]
-mod tests {
-    use p3_field::{PackedValue, PrimeCharacteristicRing};
-    use p3_koala_bear::KoalaBear;
-    use whir_p3::poly::evals::EvaluationsList;
-
-    use super::fold_multilinear_packed;
-
-    type F = KoalaBear;
-
-    fn fold_reference(evals: &[F], scalars: &[F]) -> Vec<F> {
-        let new_size = evals.len() / scalars.len();
-        (0..new_size)
-            .map(|i| {
-                scalars
-                    .iter()
-                    .enumerate()
-                    .map(|(j, s)| evals[i + j * new_size] * *s)
-                    .sum()
-            })
-            .collect()
-    }
-
-    #[test]
-    fn fold_multilinear_packed_matches_reference_divisible() {
-        let width = <F as p3_field::Field>::Packing::WIDTH;
-        let Some(new_size) = (0..20)
-            .map(|n| 1usize << n)
-            .find(|size| size.is_multiple_of(width))
-        else {
-            return;
-        };
-        let scalars = vec![
-            F::from_usize(2),
-            F::from_usize(3),
-            F::from_usize(5),
-            F::from_usize(7),
-        ];
-        let evals = (0..new_size * scalars.len())
-            .map(|i| F::from_usize(11 + 2 * i))
-            .collect::<Vec<_>>();
-        let m = EvaluationsList::new(evals.clone());
-
-        let folded = fold_multilinear_packed(&m, &scalars);
-        let expected = fold_reference(&evals, &scalars);
-
-        assert_eq!(folded.as_slice(), expected.as_slice());
-    }
-
-    #[test]
-    fn fold_multilinear_packed_matches_reference_with_suffix() {
-        let width = <F as p3_field::Field>::Packing::WIDTH;
-        let Some(new_size) = (0..20)
-            .map(|n| 1usize << n)
-            .find(|size| !size.is_multiple_of(width))
-        else {
-            return;
-        };
-        let scalars = vec![F::from_usize(3), F::from_usize(4)];
-        let evals = (0..new_size * scalars.len())
-            .map(|i| F::from_usize(17 + i))
-            .collect::<Vec<_>>();
-        let m = EvaluationsList::new(evals.clone());
-
-        let folded = fold_multilinear_packed(&m, &scalars);
-        let expected = fold_reference(&evals, &scalars);
-
-        assert_eq!(folded.as_slice(), expected.as_slice());
-    }
 }

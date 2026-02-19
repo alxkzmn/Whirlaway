@@ -70,7 +70,7 @@ impl Circuit<8> for Poseidon2Circuit {
 
     fn make_table(
         preprocessed: &Self::Preprocessed,
-        _settings: &AirSettings,
+        settings: &AirSettings,
     ) -> AirTable<Self::F, Self::EF, Self::Air> {
         AirTable::<F, EF, _>::new(
             Poseidon2Air::<
@@ -83,6 +83,7 @@ impl Circuit<8> for Poseidon2Circuit {
                 PARTIAL_ROUNDS,
             >::new(preprocessed.constants.clone()),
             preprocessed.log_length,
+            settings.univariate_skips,
             Vec::new(),
             5,
             0,
