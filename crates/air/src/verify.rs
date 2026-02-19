@@ -1,8 +1,6 @@
 use p3_air::Air;
 use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger};
-use p3_field::{
-    ExtensionField, Field, Packable, TwoAdicField, cyclic_subgroup_known_order, dot_product,
-};
+use p3_field::{ExtensionField, Packable, TwoAdicField, cyclic_subgroup_known_order, dot_product};
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
 use serde::{Deserialize, Serialize};
 use sumcheck::{SumcheckComputation, SumcheckError, SumcheckGrinding};
@@ -28,7 +26,6 @@ use super::table::AirTable;
 pub enum AirVerifError {
     InvalidPcsCommitment,
     InvalidPcsOpening,
-    InvalidUnivariateSkip,
     Fs(ProofError),
     Sumcheck(SumcheckError),
     InvalidBoundaryCondition,
@@ -45,13 +42,6 @@ impl From<SumcheckError> for AirVerifError {
     fn from(e: SumcheckError) -> Self {
         Self::Sumcheck(e)
     }
-}
-
-fn decode_univariate_skip<F: Field, EF: ExtensionField<F>>(
-    encoded: EF,
-    max_candidate: usize,
-) -> Option<usize> {
-    (1..=max_candidate).find(|&skip| encoded == EF::from_usize(skip))
 }
 
 impl<
@@ -109,15 +99,7 @@ impl<
                 .saturating_sub(EF::bits().saturating_sub(self.log_length)),
         )?;
 
-        let encoded_univariate_skip = verifier_state.next_extension_scalars_vec(1)?[0];
-        let univariate_skips = decode_univariate_skip(encoded_univariate_skip, log_length)
-            .ok_or(AirVerifError::InvalidUnivariateSkip)?;
-        if !self.validate_resolved_univariate_skips(settings, univariate_skips) {
-            return Err(AirVerifError::InvalidUnivariateSkip);
-        }
-        let selectors = self.selector_polynomials(univariate_skips);
-
-        let mut zerocheck_challenges = vec![EF::ZERO; log_length - univariate_skips + 1];
+        let mut zerocheck_challenges = vec![EF::ZERO; log_length - settings.univariate_skips + 1];
         for challenge in &mut zerocheck_challenges {
             *challenge = verifier_state.sample();
         }
@@ -127,7 +109,7 @@ impl<
                 verifier_state,
                 self.constraint_degree + 1,
                 log_length,
-                univariate_skips,
+                settings.univariate_skips,
                 SumcheckGrinding::Auto {
                     security_bits: settings.security_bits,
                 },
@@ -139,7 +121,8 @@ impl<
         let witness_up = verifier_state.next_extension_scalars_vec(self.n_witness_columns())?;
         let witness_down = verifier_state.next_extension_scalars_vec(self.n_witness_columns())?;
 
-        let outer_selector_evals = selectors
+        let outer_selector_evals = self
+            .univariate_selectors
             .iter()
             .map(|s| s.evaluate_extension(outer_sumcheck_challenge.point[0]))
             .collect::<Vec<_>>();
@@ -180,7 +163,8 @@ impl<
             &public_values_ext,
         );
 
-        let zerocheck_selector_evals = selectors
+        let zerocheck_selector_evals = self
+            .univariate_selectors
             .iter()
             .map(|s| s.evaluate_extension(zerocheck_challenges[0]));
         if dot_product::<EF, _, _>(
@@ -207,7 +191,8 @@ impl<
 
         let alpha: EF = verifier_state.sample();
 
-        let sub_evals = verifier_state.next_extension_scalars_vec(1 << univariate_skips)?;
+        let sub_evals =
+            verifier_state.next_extension_scalars_vec(1 << settings.univariate_skips)?;
 
         let column_batching_evals =
             EvaluationsList::new_from_point(&columns_batching_scalars, EF::ONE).as_slice()
@@ -230,7 +215,7 @@ impl<
             return Err(AirVerifError::SumMismatch);
         }
 
-        let mut epsilons = vec![EF::ZERO; univariate_skips];
+        let mut epsilons = vec![EF::ZERO; settings.univariate_skips];
         for challenge in &mut epsilons {
             *challenge = verifier_state.sample();
         }

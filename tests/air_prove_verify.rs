@@ -81,7 +81,7 @@ fn setup_keccak_merkle_compress() -> KeccakMerkleCompress {
 #[test]
 fn test_complete_air_prove_verify() {
     let (air, log_length, witness) = create_keccak_witness_columns(1);
-    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 4, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 4, 0);
 
     let settings = AirSettings::new(
         128,
@@ -138,7 +138,7 @@ fn test_complete_air_prove_verify() {
 #[test]
 fn test_complete_air_prove_verify_keccak_backend() {
     let (air, log_length, witness) = create_keccak_witness_columns(1);
-    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 4, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 4, 0);
 
     let settings = AirSettings::new(
         128,
@@ -196,7 +196,7 @@ fn test_air_prove_verify_with_preprocessed() {
     let (air, log_length, mut cols) = create_keccak_witness_columns(1);
     let preprocessed = cols.drain(..2).collect::<Vec<_>>();
     let witness = cols;
-    let table = AirTable::<F, EF, _>::new(air, log_length, preprocessed, 4, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, 4, 0);
 
     let settings = AirSettings::new(
         128,
@@ -250,7 +250,7 @@ fn test_air_prove_verify_with_preprocessed() {
 #[test]
 fn test_air_prove_verify_different_settings() {
     let (air, log_length, witness) = create_keccak_witness_columns(1);
-    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 4, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 4, 0);
 
     let merkle_hash = setup_merkle_hash();
     let merkle_compress = setup_merkle_compress();
@@ -307,7 +307,7 @@ fn test_air_prove_verify_different_settings() {
 #[test]
 fn test_air_prove_verify_larger_table() {
     let (air, log_length, witness) = create_keccak_witness_columns(2);
-    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 4, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 4, 0);
 
     let settings = AirSettings::new(
         128,

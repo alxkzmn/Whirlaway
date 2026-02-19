@@ -1,6 +1,6 @@
 #![cfg_attr(not(test), allow(unused_crate_dependencies))]
 
-use air::{AirSettings, UnivariateSkipMode};
+use air::AirSettings;
 use std::fmt::Display;
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 
@@ -18,12 +18,12 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(7);
 
-    let settings = AirSettings::new_with_skip_mode(
+    let settings = AirSettings::new(
         SECURITY_BITS,
         SecurityAssumption::CapacityBound,
         FoldingFactor::ConstantFromSecondRound(7, 4),
         1,
-        UnivariateSkipMode::auto(6, 4096),
+        4,
         5,
     );
 

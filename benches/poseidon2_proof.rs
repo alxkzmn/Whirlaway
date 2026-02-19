@@ -1,4 +1,4 @@
-use air::{AirSettings, UnivariateSkipMode};
+use air::AirSettings;
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use p3_poseidon2_air::RoundConstants;
 use rand::{RngExt, SeedableRng, rngs::StdRng};
@@ -19,12 +19,12 @@ fn bench(c: &mut Criterion) {
         RoundConstants::<F, WIDTH, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>::from_rng(&mut rng);
 
     // Default settings for benchmarking
-    let settings = AirSettings::new_with_skip_mode(
+    let settings = AirSettings::new(
         128,
         SecurityAssumption::CapacityBound,
         FoldingFactor::ConstantFromSecondRound(7, 4),
         1,
-        UnivariateSkipMode::auto(6, 4096),
+        4,
         5,
     );
 

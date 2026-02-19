@@ -1163,8 +1163,8 @@ dependencies = [
  "rand",
  "rayon",
  "tracing",
+ "utils",
  "whir-p3",
- "whirlaway-utils",
 ]
 
 [[package]]
@@ -1347,6 +1347,21 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "utils"
+version = "0.1.0"
+dependencies = [
+ "p3-air",
+ "p3-challenger",
+ "p3-field",
+ "p3-koala-bear",
+ "p3-matrix",
+ "rand",
+ "rayon",
+ "tracing",
+ "whir-p3",
+]
 
 [[package]]
 name = "valuable"
@@ -1545,22 +1560,7 @@ dependencies = [
  "tracing",
  "tracing-forest",
  "tracing-subscriber",
- "whir-p3",
- "whirlaway-utils",
-]
-
-[[package]]
-name = "whirlaway-utils"
-version = "0.1.0"
-dependencies = [
- "p3-air",
- "p3-challenger",
- "p3-field",
- "p3-koala-bear",
- "p3-matrix",
- "rand",
- "rayon",
- "tracing",
+ "utils",
  "whir-p3",
 ]
 

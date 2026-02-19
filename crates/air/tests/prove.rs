@@ -1,4 +1,4 @@
-use air::{AirSettings, UnivariateSkipMode, table::AirTable};
+use air::{AirSettings, table::AirTable};
 use air_test_utils::*;
 use p3_uni_stark::get_max_constraint_degree_extension;
 use utils::fiat_shamir::{ProverState, VerifierState};
@@ -12,7 +12,7 @@ use whir_p3::{
 fn test_air_prove_basic() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
     let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree, 0);
 
     let settings = create_test_settings();
     let merkle_hash = setup_merkle_hash();
@@ -61,7 +61,7 @@ fn test_air_prove_with_preprocessed() {
 
     let constraint_degree =
         get_max_constraint_degree_extension::<F, EF, _>(&air, preprocessed.len(), 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, preprocessed, constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, preprocessed, constraint_degree, 0);
 
     let settings = create_test_settings();
     let merkle_hash = setup_merkle_hash();
@@ -115,13 +115,14 @@ fn test_air_prove_different_univariate_skips() {
         let table = AirTable::<F, EF, _>::new(
             keccak_air::KeccakAir {},
             log_length,
+            skips,
             vec![],
             constraint_degree,
             0,
         );
 
         let mut settings = create_test_settings();
-        settings.univariate_skip_mode = UnivariateSkipMode::manual(skips);
+        settings.univariate_skips = skips;
 
         let merkle_hash = setup_merkle_hash();
         let merkle_compress = setup_merkle_compress();
@@ -165,7 +166,7 @@ fn test_air_prove_different_univariate_skips() {
 fn test_air_prove_different_settings() {
     let (air, log_length, witness) = create_keccak_witness_columns(1, 0);
     let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree, 0);
 
     let merkle_hash = setup_merkle_hash();
     let merkle_compress = setup_merkle_compress();
@@ -224,7 +225,7 @@ fn test_air_prove_witness_dimension_mismatch() {
     // Create witness with wrong log_length
     let witness = create_witness_columns(log_length + 1, 4);
 
-    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], 1, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], 1, 0);
 
     let settings = create_test_settings();
     let merkle_hash = setup_merkle_hash();
@@ -254,9 +255,9 @@ fn test_air_prove_witness_dimension_mismatch() {
 #[test]
 fn test_air_prove_larger_table() {
     let (air, log_length, witness) = create_keccak_witness_columns(2, 0);
-    // Use explicit manual skip=1 for deterministic regression behavior.
+    // Keep univariate_skips=1; skips>1 currently triggers UB in whir-p3.
     let constraint_degree = get_max_constraint_degree_extension::<F, EF, _>(&air, 0, 0, 0, 0);
-    let table = AirTable::<F, EF, _>::new(air, log_length, vec![], constraint_degree, 0);
+    let table = AirTable::<F, EF, _>::new(air, log_length, 1, vec![], constraint_degree, 0);
 
     let settings = create_test_settings();
     let merkle_hash = setup_merkle_hash();

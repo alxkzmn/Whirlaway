@@ -1,7 +1,7 @@
 use air::utils::{column_down, column_up, columns_up_and_down, matrix_down_lde, matrix_up_lde};
 use p3_field::PrimeCharacteristicRing;
 use p3_koala_bear::KoalaBear;
-use rand::{RngExt, SeedableRng, rngs::StdRng};
+use rand::{Rng, SeedableRng, rngs::StdRng};
 use whir_p3::poly::evals::EvaluationsList;
 
 type F = KoalaBear;

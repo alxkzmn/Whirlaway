@@ -96,8 +96,11 @@ where
         EF: Default,
         F::Packing: Eq + Send + Sync,
     {
+        assert!(
+            settings.univariate_skips < self.log_length,
+            "TODO handle the case UNIVARIATE_SKIPS >= log_length"
+        );
         let log_length = self.log_length;
-        let univariate_skips = self.resolve_univariate_skips(settings);
         assert!(witness.iter().all(|w| w.num_variables() == log_length));
         assert_eq!(public_values.len(), self.num_public_values);
         let public_values_packed = public_values
@@ -154,11 +157,8 @@ where
                 .collect::<Vec<_>>();
 
         self.zerocheck_pow(prover_state, settings).unwrap();
-        // Commit resolved skip count into the transcript/proof data so verifier does not
-        // need to infer it from local settings.
-        prover_state.add_extension_scalars(&[EF::from_usize(univariate_skips)]);
 
-        let mut zerocheck_challenges = vec![EF::ZERO; log_length + 1 - univariate_skips];
+        let mut zerocheck_challenges = vec![EF::ZERO; log_length + 1 - settings.univariate_skips];
         for challenge in &mut zerocheck_challenges {
             *challenge = prover_state.sample();
         }
@@ -171,7 +171,7 @@ where
         let (outer_sumcheck_challenges, all_inner_sums, _) =
             info_span!("zerocheck").in_scope(|| {
                 sumcheck::prove(
-                    univariate_skips,
+                    settings.univariate_skips,
                     &columns_up_and_down(&preprocessed_and_witness),
                     &self.air,
                     self.constraint_degree,
@@ -240,7 +240,7 @@ where
 
         prover_state.add_extension_scalars(sub_evals.as_slice());
 
-        let mut epsilons = vec![EF::ZERO; univariate_skips];
+        let mut epsilons = vec![EF::ZERO; settings.univariate_skips];
         for challenge in &mut epsilons {
             *challenge = prover_state.sample();
         }
