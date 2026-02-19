@@ -7,6 +7,7 @@ use p3_challenger::{
 use p3_field::{ExtensionField, Packable, PrimeField64, TwoAdicField};
 use p3_keccak::Keccak256Hash;
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
+use serde::{Deserialize, Serialize};
 use utils::{ProverState, VerifierState};
 use whir_p3::fiat_shamir::domain_separator::DomainSeparator;
 use whir_p3::poly::evals::EvaluationsList;
@@ -163,7 +164,11 @@ where
     pub domain_separator: DomainSeparator<C::EF, C::F>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "C::F: Serialize, C::EF: Serialize, C::W: Serialize, [C::W; DIGEST_ELEMS]: Serialize",
+    deserialize = "C::F: Deserialize<'de>, C::EF: Deserialize<'de>, C::W: Deserialize<'de>, [C::W; DIGEST_ELEMS]: Deserialize<'de>"
+))]
 pub struct Proof<C, const DIGEST_ELEMS: usize>
 where
     C: Circuit<DIGEST_ELEMS>,
@@ -316,12 +321,7 @@ where
     C::W: serde::Serialize,
     [C::W; DIGEST_ELEMS]: serde::Serialize,
 {
-    let proof_data_bytes =
-        (proof.proof_data.len() as f64 * (C::F::ORDER_U64 as f64).log2() / 8.0).ceil() as usize;
-    let whir_bytes = bincode::serialize(&proof.whir_proof)
-        .map(|v| v.len())
-        .unwrap_or(0);
-    proof_data_bytes + whir_bytes
+    bincode::serialize(proof).map(|v| v.len()).unwrap_or(0)
 }
 
 pub fn num_constraints<C, S, const DIGEST_ELEMS: usize>(
