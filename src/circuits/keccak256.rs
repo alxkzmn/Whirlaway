@@ -5,8 +5,8 @@ use keccak_air::{
     generate_sponge_trace_and_digest_limbs,
 };
 use p3_challenger::{HashChallenger, SerializingChallenger32};
-use p3_field::extension::BinomialExtensionField;
-use p3_field::{ExtensionField, PrimeCharacteristicRing, PrimeField64, TwoAdicField};
+use p3_field::extension::{BinomialExtensionField, QuinticTrinomialExtensionField};
+use p3_field::{ExtensionField, PrimeCharacteristicRing, TwoAdicField};
 use p3_keccak::Keccak256Hash;
 use p3_koala_bear::KoalaBear;
 use p3_matrix::Matrix;
@@ -18,7 +18,10 @@ use crate::hashers::{KECCAK_DIGEST_ELEMS, KeccakNodeCompress, KeccakU32BeLeafHas
 use crate::proving_system::Circuit;
 
 pub type F = KoalaBear;
-pub type EF = BinomialExtensionField<F, 8>;
+pub type Binomial4Challenge = BinomialExtensionField<F, 4>;
+pub type Binomial8Challenge = BinomialExtensionField<F, 8>;
+pub type QuinticChallenge = QuinticTrinomialExtensionField<F>;
+pub type EF = Binomial8Challenge;
 
 pub type MerkleHash = KeccakU32BeLeafHasher;
 pub type MerkleCompress = KeccakNodeCompress;
@@ -51,8 +54,11 @@ fn trace_from_message(message: &[u8]) -> RowMajorMatrix<F> {
     full_trace
 }
 
-fn make_table(log_length: usize, settings: &AirSettings) -> AirTable<F, EF, KeccakSpongeAir> {
-    AirTable::<F, EF, _>::new(
+fn make_table<E: ExtensionField<F> + TwoAdicField>(
+    log_length: usize,
+    settings: &AirSettings,
+) -> AirTable<F, E, KeccakSpongeAir> {
+    AirTable::<F, E, _>::new(
         KeccakSpongeAir::new(),
         log_length,
         settings.univariate_skips,
@@ -63,8 +69,9 @@ fn make_table(log_length: usize, settings: &AirSettings) -> AirTable<F, EF, Kecc
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Keccak256Circuit {
+pub struct Keccak256Circuit<E: ExtensionField<F> + TwoAdicField = EF> {
     pub input_size: usize,
+    pub _marker: std::marker::PhantomData<E>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -73,9 +80,22 @@ pub struct Keccak256Input {
     pub expected_digest: [u8; 32],
 }
 
-impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
-    type F = F;
-    type EF = EF;
+impl<E: ExtensionField<F> + TwoAdicField> Keccak256Circuit<E> {
+    pub fn new(input_size: usize) -> Self {
+        Self {
+            input_size,
+            _marker: std::marker::PhantomData,
+        }
+    }
+
+    pub fn public_values(preprocessed: &Keccak256Preprocessed, input: &Keccak256Input) -> Vec<F> {
+        <Self as Circuit<F, E, KECCAK_DIGEST_ELEMS>>::public_values(preprocessed, input)
+    }
+}
+
+impl<E: ExtensionField<F> + TwoAdicField> Circuit<F, E, KECCAK_DIGEST_ELEMS>
+    for Keccak256Circuit<E>
+{
     type Air = KeccakSpongeAir;
 
     type W = u64;
@@ -94,14 +114,14 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
     fn make_table(
         preprocessed: &Self::Preprocessed,
         settings: &AirSettings,
-    ) -> AirTable<Self::F, Self::EF, Self::Air> {
+    ) -> AirTable<F, E, Self::Air> {
         make_table(preprocessed.log_length, settings)
     }
 
     fn build_witness(
         preprocessed: &Self::Preprocessed,
         input: &Self::Input,
-    ) -> Vec<EvaluationsList<Self::F>> {
+    ) -> Vec<EvaluationsList<F>> {
         debug_assert_eq!(input.message.len(), preprocessed.input_size);
 
         let trace = trace_from_message(&input.message);
@@ -114,20 +134,10 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for Keccak256Circuit {
             .collect()
     }
 
-    fn public_values(_preprocessed: &Self::Preprocessed, input: &Self::Input) -> Vec<Self::F> {
+    fn public_values(_preprocessed: &Self::Preprocessed, input: &Self::Input) -> Vec<F> {
         digest_to_u16_limbs_le(&input.expected_digest)
             .iter()
             .map(|&limb| F::from_u16(limb))
             .collect()
     }
 }
-
-// Extra trait bounds we rely on elsewhere.
-const _: () = {
-    fn _assert_bounds()
-    where
-        F: TwoAdicField + PrimeField64,
-        EF: ExtensionField<F> + TwoAdicField,
-    {
-    }
-};

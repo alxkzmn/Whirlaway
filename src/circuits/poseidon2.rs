@@ -43,9 +43,10 @@ pub struct Poseidon2Circuit {
     pub constants: RoundConstants<F, WIDTH, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>,
 }
 
-impl Circuit<8> for Poseidon2Circuit {
-    type F = F;
-    type EF = EF;
+impl<E> Circuit<F, E, 8> for Poseidon2Circuit
+where
+    E: ExtensionField<F> + TwoAdicField,
+{
     type Air = Poseidon2Air<
         F,
         LinearLayers,
@@ -71,8 +72,8 @@ impl Circuit<8> for Poseidon2Circuit {
     fn make_table(
         preprocessed: &Self::Preprocessed,
         settings: &AirSettings,
-    ) -> AirTable<Self::F, Self::EF, Self::Air> {
-        AirTable::<F, EF, _>::new(
+    ) -> AirTable<F, E, Self::Air> {
+        AirTable::<F, E, _>::new(
             Poseidon2Air::<
                 F,
                 LinearLayers,
@@ -93,7 +94,7 @@ impl Circuit<8> for Poseidon2Circuit {
     fn build_witness(
         preprocessed: &Self::Preprocessed,
         input: &Self::Input,
-    ) -> Vec<EvaluationsList<Self::F>> {
+    ) -> Vec<EvaluationsList<F>> {
         debug_assert_eq!(input.len(), 1 << preprocessed.log_length);
 
         let witness_matrix = generate_trace_rows::<

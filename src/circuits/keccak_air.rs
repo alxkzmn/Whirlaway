@@ -32,9 +32,10 @@ pub struct KeccakAirCircuit {
     pub n_inputs: usize,
 }
 
-impl Circuit<KECCAK_DIGEST_ELEMS> for KeccakAirCircuit {
-    type F = F;
-    type EF = EF;
+impl<E> Circuit<F, E, KECCAK_DIGEST_ELEMS> for KeccakAirCircuit
+where
+    E: ExtensionField<F> + TwoAdicField,
+{
     type Air = KeccakAir;
 
     type W = u64;
@@ -54,8 +55,8 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for KeccakAirCircuit {
     fn make_table(
         preprocessed: &Self::Preprocessed,
         settings: &AirSettings,
-    ) -> AirTable<Self::F, Self::EF, Self::Air> {
-        AirTable::<F, EF, _>::new(
+    ) -> AirTable<F, E, Self::Air> {
+        AirTable::<F, E, _>::new(
             KeccakAir {},
             preprocessed.log_length,
             settings.univariate_skips,
@@ -68,7 +69,7 @@ impl Circuit<KECCAK_DIGEST_ELEMS> for KeccakAirCircuit {
     fn build_witness(
         preprocessed: &Self::Preprocessed,
         input: &Self::Input,
-    ) -> Vec<EvaluationsList<Self::F>> {
+    ) -> Vec<EvaluationsList<F>> {
         debug_assert_eq!(input.len(), preprocessed.n_inputs);
 
         let witness_matrix = generate_trace_rows::<F>(input.clone(), 0).transpose();

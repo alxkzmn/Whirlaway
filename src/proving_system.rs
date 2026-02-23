@@ -1,10 +1,8 @@
 use air::AirSettings;
 use air::table::AirTable;
 use p3_air::Air;
-use p3_challenger::{
-    CanObserve, FieldChallenger, GrindingChallenger, HashChallenger, SerializingChallenger32,
-};
-use p3_field::{ExtensionField, Packable, PrimeField64, TwoAdicField};
+use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger, SerializingChallenger32};
+use p3_field::{ExtensionField, Field, TwoAdicField};
 use p3_keccak::Keccak256Hash;
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
 use serde::{Deserialize, Serialize};
@@ -15,16 +13,20 @@ use whir_p3::whir::proof::WhirProof;
 
 use crate::hashers::{KECCAK_DIGEST_ELEMS, KeccakNodeCompress, KeccakU32BeLeafHasher};
 
-pub trait ProvingSystemSettings<C, const DIGEST_ELEMS: usize>
-where
-    C: Circuit<DIGEST_ELEMS>,
+pub trait ProvingSystemSettings<
+    C,
+    F: TwoAdicField,
+    EF: ExtensionField<F> + TwoAdicField,
+    const DIGEST_ELEMS: usize,
+> where
+    C: Circuit<F, EF, DIGEST_ELEMS>,
 {
-    type MerkleHash: CryptographicHasher<C::F, [C::W; DIGEST_ELEMS]> + Sync + Clone;
+    type MerkleHash: CryptographicHasher<F, [C::W; DIGEST_ELEMS]> + Sync + Clone;
     type MerkleCompress: PseudoCompressionFunction<[C::W; DIGEST_ELEMS], 2> + Sync + Clone;
 
-    type Challenger: FieldChallenger<C::F>
-        + GrindingChallenger<Witness = C::F>
-        + CanObserve<p3_symmetric::Hash<C::F, C::W, DIGEST_ELEMS>>
+    type Challenger: FieldChallenger<F>
+        + GrindingChallenger<Witness = F>
+        + CanObserve<p3_symmetric::Hash<F, C::W, DIGEST_ELEMS>>
         + Clone;
 
     fn air_settings(&self) -> &AirSettings;
@@ -57,15 +59,17 @@ impl<MH, MC, CH> ProvingSystemConfig<MH, MC, CH> {
     }
 }
 
-impl<C, MH, MC, CH, const DIGEST_ELEMS: usize> ProvingSystemSettings<C, DIGEST_ELEMS>
+impl<C, MH, MC, CH, F, EF, const DIGEST_ELEMS: usize> ProvingSystemSettings<C, F, EF, DIGEST_ELEMS>
     for ProvingSystemConfig<MH, MC, CH>
 where
-    C: Circuit<DIGEST_ELEMS>,
-    MH: CryptographicHasher<C::F, [C::W; DIGEST_ELEMS]> + Sync + Clone,
+    F: TwoAdicField + Clone,
+    EF: ExtensionField<F> + TwoAdicField,
+    C: Circuit<F, EF, DIGEST_ELEMS>,
+    MH: CryptographicHasher<F, [C::W; DIGEST_ELEMS]> + Sync + Clone,
     MC: PseudoCompressionFunction<[C::W; DIGEST_ELEMS], 2> + Sync + Clone,
-    CH: FieldChallenger<C::F>
-        + GrindingChallenger<Witness = C::F>
-        + CanObserve<p3_symmetric::Hash<C::F, C::W, DIGEST_ELEMS>>
+    CH: FieldChallenger<F>
+        + GrindingChallenger<Witness = F>
+        + CanObserve<p3_symmetric::Hash<F, C::W, DIGEST_ELEMS>>
         + Clone,
 {
     type MerkleHash = MH;
@@ -90,19 +94,35 @@ where
 }
 
 #[derive(Clone, Debug)]
-pub struct KeccakProvingSystemConfig {
+pub struct KeccakProvingSystemConfig<
+    EF: ExtensionField<crate::circuits::keccak256::F> + TwoAdicField,
+> {
     pub air_settings: AirSettings,
+    _marker: std::marker::PhantomData<EF>,
 }
 
-impl ProvingSystemSettings<crate::circuits::keccak256::Keccak256Circuit, KECCAK_DIGEST_ELEMS>
-    for KeccakProvingSystemConfig
+impl<EF: ExtensionField<crate::circuits::keccak256::F> + TwoAdicField>
+    KeccakProvingSystemConfig<EF>
+{
+    pub fn new(air_settings: AirSettings) -> Self {
+        Self {
+            air_settings,
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<EF: ExtensionField<crate::circuits::keccak256::F> + TwoAdicField>
+    ProvingSystemSettings<
+        crate::circuits::keccak256::Keccak256Circuit<EF>,
+        crate::circuits::keccak256::F,
+        EF,
+        KECCAK_DIGEST_ELEMS,
+    > for KeccakProvingSystemConfig<EF>
 {
     type MerkleHash = KeccakU32BeLeafHasher;
     type MerkleCompress = KeccakNodeCompress;
-    type Challenger = SerializingChallenger32<
-        crate::circuits::keccak256::F,
-        HashChallenger<u8, Keccak256Hash, 32>,
-    >;
+    type Challenger = crate::circuits::keccak256::Challenger;
 
     fn air_settings(&self) -> &AirSettings {
         &self.air_settings
@@ -121,13 +141,15 @@ impl ProvingSystemSettings<crate::circuits::keccak256::Keccak256Circuit, KECCAK_
     }
 }
 
-pub trait Circuit<const DIGEST_ELEMS: usize> {
-    type F: TwoAdicField + PrimeField64 + Ord + Eq + Packable + Default;
-    type EF: ExtensionField<Self::F> + TwoAdicField + Default;
-
-    type Air: for<'a> Air<utils::ConstraintFolder<'a, Self::F, Self::F, Self::EF>>
-        + for<'a> Air<utils::ConstraintFolder<'a, Self::F, Self::EF, Self::EF>>
-        + for<'a> Air<utils::ConstraintFolderPacked<'a, Self::F, Self::EF>>;
+pub trait Circuit<
+    F: Field + TwoAdicField,
+    EF: ExtensionField<F> + TwoAdicField,
+    const DIGEST_ELEMS: usize,
+>
+{
+    type Air: for<'a> Air<utils::ConstraintFolder<'a, F, F, EF>>
+        + for<'a> Air<utils::ConstraintFolder<'a, F, EF, EF>>
+        + for<'a> Air<utils::ConstraintFolderPacked<'a, F, EF>>;
 
     type W: p3_field::PackedValue<Value = Self::W> + Eq + Send + Sync + Default;
 
@@ -139,14 +161,14 @@ pub trait Circuit<const DIGEST_ELEMS: usize> {
     fn make_table(
         preprocessed: &Self::Preprocessed,
         settings: &AirSettings,
-    ) -> AirTable<Self::F, Self::EF, Self::Air>;
+    ) -> AirTable<F, EF, Self::Air>;
 
     fn build_witness(
         preprocessed: &Self::Preprocessed,
         input: &Self::Input,
-    ) -> Vec<EvaluationsList<Self::F>>;
+    ) -> Vec<EvaluationsList<F>>;
 
-    fn public_values(preprocessed: &Self::Preprocessed, input: &Self::Input) -> Vec<Self::F> {
+    fn public_values(preprocessed: &Self::Preprocessed, input: &Self::Input) -> Vec<F> {
         let _ = preprocessed;
         let _ = input;
         Vec::new()
@@ -154,38 +176,47 @@ pub trait Circuit<const DIGEST_ELEMS: usize> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Prepared<C, S, const DIGEST_ELEMS: usize>
-where
-    C: Circuit<DIGEST_ELEMS>,
-    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
+pub struct Prepared<
+    C,
+    S,
+    F: TwoAdicField,
+    EF: ExtensionField<F> + TwoAdicField,
+    const DIGEST_ELEMS: usize,
+> where
+    C: Circuit<F, EF, DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, F, EF, DIGEST_ELEMS>,
 {
     pub settings: S,
     pub circuit: C::Preprocessed,
-    pub domain_separator: DomainSeparator<C::EF, C::F>,
+    pub domain_separator: DomainSeparator<EF, F>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound(
-    serialize = "C::F: Serialize, C::EF: Serialize, C::W: Serialize, [C::W; DIGEST_ELEMS]: Serialize",
-    deserialize = "C::F: Deserialize<'de>, C::EF: Deserialize<'de>, C::W: Deserialize<'de>, [C::W; DIGEST_ELEMS]: Deserialize<'de>"
+    serialize = "C::W: Serialize, [C::W; DIGEST_ELEMS]: Serialize",
+    deserialize = "C::W: Deserialize<'de>, [C::W; DIGEST_ELEMS]: Deserialize<'de>"
 ))]
-pub struct Proof<C, const DIGEST_ELEMS: usize>
-where
-    C: Circuit<DIGEST_ELEMS>,
+pub struct Proof<
+    C,
+    F: TwoAdicField,
+    EF: ExtensionField<F> + TwoAdicField,
+    const DIGEST_ELEMS: usize,
+> where
+    C: Circuit<F, EF, DIGEST_ELEMS>,
 {
-    pub whir_proof: WhirProof<C::F, C::EF, C::W, DIGEST_ELEMS>,
-    pub proof_data: Vec<C::EF>,
+    pub whir_proof: WhirProof<F, EF, C::W, DIGEST_ELEMS>,
+    pub proof_data: Vec<EF>,
 }
 
-pub fn prepare<C, S, const DIGEST_ELEMS: usize>(
+pub fn prepare<C, S, F, EF, const DIGEST_ELEMS: usize>(
     settings: &S,
     circuit: C,
-) -> Prepared<C, S, DIGEST_ELEMS>
+) -> Prepared<C, S, F, EF, DIGEST_ELEMS>
 where
-    C: Circuit<DIGEST_ELEMS>,
-    S: ProvingSystemSettings<C, DIGEST_ELEMS> + Clone,
-    C::F: serde::Serialize + for<'de> serde::Deserialize<'de>,
-    C::EF: serde::Serialize + for<'de> serde::Deserialize<'de>,
+    C: Circuit<F, EF, DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, F, EF, DIGEST_ELEMS> + Clone,
+    F: Field + TwoAdicField + serde::Serialize + for<'de> serde::Deserialize<'de>,
+    EF: ExtensionField<F> + TwoAdicField + serde::Serialize + for<'de> serde::Deserialize<'de>,
 {
     let preprocessed_circuit = circuit.preprocess(settings.air_settings());
     let table = C::make_table(&preprocessed_circuit, settings.air_settings());
@@ -196,7 +227,7 @@ where
         settings.merkle_compress(),
     );
 
-    let mut domain_separator = DomainSeparator::<C::EF, C::F>::new(Vec::new());
+    let mut domain_separator = DomainSeparator::<EF, F>::new(Vec::new());
     domain_separator
         .commit_statement::<S::MerkleHash, S::MerkleCompress, S::Challenger, DIGEST_ELEMS>(
             &whir_params,
@@ -213,18 +244,22 @@ where
     }
 }
 
-pub fn prove<C, S, const DIGEST_ELEMS: usize>(
-    prepared: &Prepared<C, S, DIGEST_ELEMS>,
+pub fn prove<
+    C,
+    S,
+    F: Field + TwoAdicField + Ord,
+    EF: ExtensionField<F> + TwoAdicField + Default,
+    const DIGEST_ELEMS: usize,
+>(
+    prepared: &Prepared<C, S, F, EF, DIGEST_ELEMS>,
     input: &C::Input,
-) -> Proof<C, DIGEST_ELEMS>
+) -> Proof<C, F, EF, DIGEST_ELEMS>
 where
-    C: Circuit<DIGEST_ELEMS>,
-    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
-    C::F: Eq,
-    C::EF: Default,
+    C: Circuit<F, EF, DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, F, EF, DIGEST_ELEMS>,
     C::W: p3_field::PackedValue<Value = C::W> + Eq + Send + Sync + Default,
     [C::W; DIGEST_ELEMS]: serde::Serialize + for<'de> serde::Deserialize<'de>,
-    <C::F as p3_field::Field>::Packing: Eq + Send + Sync,
+    <F as p3_field::Field>::Packing: Eq + Send + Sync,
 {
     let witness = C::build_witness(&prepared.circuit, input);
     let table = C::make_table(&prepared.circuit, prepared.settings.air_settings());
@@ -252,18 +287,23 @@ where
     }
 }
 
-pub fn verify<C, S, const DIGEST_ELEMS: usize>(
-    prepared: &Prepared<C, S, DIGEST_ELEMS>,
-    proof: &Proof<C, DIGEST_ELEMS>,
-    public_values: &[C::F],
+pub fn verify<
+    C,
+    S,
+    F: Field + TwoAdicField + Eq,
+    EF: ExtensionField<F> + TwoAdicField,
+    const DIGEST_ELEMS: usize,
+>(
+    prepared: &Prepared<C, S, F, EF, DIGEST_ELEMS>,
+    proof: &Proof<C, F, EF, DIGEST_ELEMS>,
+    public_values: &[F],
 ) -> Result<(), String>
 where
-    C: Circuit<DIGEST_ELEMS>,
-    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
-    C::F: Eq,
+    C: Circuit<F, EF, DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, F, EF, DIGEST_ELEMS>,
     C::W: p3_field::PackedValue<Value = C::W> + Eq + Send + Sync + Copy,
     [C::W; DIGEST_ELEMS]: serde::Serialize + for<'de> serde::Deserialize<'de>,
-    <C::F as p3_field::Field>::Packing: Eq + Send + Sync,
+    <F as p3_field::Field>::Packing: Eq + Send + Sync,
 {
     let table = C::make_table(&prepared.circuit, prepared.settings.air_settings());
 
@@ -299,12 +339,18 @@ where
     Ok(())
 }
 
-pub fn preprocessing_size<C, S, const DIGEST_ELEMS: usize>(
-    prepared: &Prepared<C, S, DIGEST_ELEMS>,
+pub fn preprocessing_size<
+    C,
+    S,
+    F: TwoAdicField,
+    EF: ExtensionField<F> + TwoAdicField,
+    const DIGEST_ELEMS: usize,
+>(
+    prepared: &Prepared<C, S, F, EF, DIGEST_ELEMS>,
 ) -> usize
 where
-    C: Circuit<DIGEST_ELEMS>,
-    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
+    C: Circuit<F, EF, DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, F, EF, DIGEST_ELEMS>,
     C::Preprocessed: serde::Serialize,
 {
     bincode::serialize(&(prepared.settings.air_settings().clone(), &prepared.circuit))
@@ -312,24 +358,31 @@ where
         .unwrap_or(0)
 }
 
-pub fn proof_size<C, const DIGEST_ELEMS: usize>(proof: &Proof<C, DIGEST_ELEMS>) -> usize
+pub fn proof_size<C, F, EF, const DIGEST_ELEMS: usize>(
+    proof: &Proof<C, F, EF, DIGEST_ELEMS>,
+) -> usize
 where
-    C: Circuit<DIGEST_ELEMS>,
-    C::F: PrimeField64,
-    C::F: serde::Serialize,
-    C::EF: serde::Serialize,
+    C: Circuit<F, EF, DIGEST_ELEMS>,
+    F: TwoAdicField + serde::Serialize,
+    EF: ExtensionField<F> + TwoAdicField + serde::Serialize,
     C::W: serde::Serialize,
     [C::W; DIGEST_ELEMS]: serde::Serialize,
 {
     bincode::serialize(proof).map(|v| v.len()).unwrap_or(0)
 }
 
-pub fn num_constraints<C, S, const DIGEST_ELEMS: usize>(
-    prepared: &Prepared<C, S, DIGEST_ELEMS>,
+pub fn num_constraints<
+    C,
+    S,
+    F: TwoAdicField,
+    EF: ExtensionField<F> + TwoAdicField,
+    const DIGEST_ELEMS: usize,
+>(
+    prepared: &Prepared<C, S, F, EF, DIGEST_ELEMS>,
 ) -> usize
 where
-    C: Circuit<DIGEST_ELEMS>,
-    S: ProvingSystemSettings<C, DIGEST_ELEMS>,
+    C: Circuit<F, EF, DIGEST_ELEMS>,
+    S: ProvingSystemSettings<C, F, EF, DIGEST_ELEMS>,
 {
     let table = C::make_table(&prepared.circuit, prepared.settings.air_settings());
     table.n_constraints
