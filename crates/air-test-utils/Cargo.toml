@@ -3,9 +3,6 @@ name = "air-test-utils"
 version.workspace = true
 edition.workspace = true
 
-[lints]
-workspace = true
-
 [dependencies]
 air.workspace = true
 keccak_air.workspace = true
