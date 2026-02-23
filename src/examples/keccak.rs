@@ -7,9 +7,8 @@ use tracing_forest::ForestLayer;
 use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::SubscriberInitExt};
 use whir_p3::parameters::FoldingFactor;
 
-use crate::circuits::keccak256::{Keccak256Circuit, Keccak256Input};
-use crate::hashers::KECCAK_DIGEST_ELEMS;
-use crate::proving_system::{Circuit, KeccakProvingSystemConfig, prepare, proof_size, prove, verify};
+use crate::circuits::keccak256::{Binomial8Challenge, Keccak256Circuit, Keccak256Input};
+use crate::proving_system::{KeccakProvingSystemConfig, prepare, proof_size, prove, verify};
 use sha3::Digest;
 
 // BabyBear
@@ -107,24 +106,20 @@ pub fn prove_keccak(
 
     let message: Vec<u8> = (0..message_len).map(|_| rng.random()).collect();
 
-    let proving_settings = KeccakProvingSystemConfig {
-        air_settings: settings.clone(),
-    };
+    let proving_settings = KeccakProvingSystemConfig::<Binomial8Challenge>::new(settings.clone());
 
     let t = Instant::now();
 
-    let keccak_air_circuit = Keccak256Circuit {
-        input_size: message_len,
-    };
+    let keccak_air_circuit = Keccak256Circuit::<Binomial8Challenge>::new(message_len);
 
-    let prepared =
-        prepare::<Keccak256Circuit, _, KECCAK_DIGEST_ELEMS>(&proving_settings, keccak_air_circuit);
+    let prepared = prepare(&proving_settings, keccak_air_circuit);
     let expected_digest: [u8; 32] = sha3::Keccak256::digest(&message).into();
     let input = Keccak256Input {
         message,
         expected_digest,
     };
-    let public_values = Keccak256Circuit::public_values(&prepared.circuit, &input);
+    let public_values =
+        Keccak256Circuit::<Binomial8Challenge>::public_values(&prepared.circuit, &input);
     let proof = prove(&prepared, &input);
 
     let prover_time = t.elapsed();
@@ -138,7 +133,7 @@ pub fn prove_keccak(
         verifier_time = time.elapsed();
     }
 
-    let proof_size = proof_size::<Keccak256Circuit, KECCAK_DIGEST_ELEMS>(&proof) as f64;
+    let proof_size = proof_size(&proof) as f64;
 
     // TODO(onchain): Serialize Keccak digests to bytes32 at the I/O boundary.
 

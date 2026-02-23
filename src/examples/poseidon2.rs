@@ -9,8 +9,8 @@ use tracing_subscriber::{EnvFilter, Registry, layer::SubscriberExt, util::Subscr
 use whir_p3::parameters::FoldingFactor;
 
 use crate::circuits::poseidon2::{
-    Challenger as MyChallenger, F, HALF_FULL_ROUNDS, MerkleCompress, MerkleHash, PARTIAL_ROUNDS,
-    Poseidon2Circuit, Poseidon16, Poseidon24, WIDTH,
+    Challenger as MyChallenger, EF, F, HALF_FULL_ROUNDS, MerkleCompress, MerkleHash,
+    PARTIAL_ROUNDS, Poseidon2Circuit, Poseidon16, Poseidon24, WIDTH,
 };
 use crate::proving_system::{ProvingSystemConfig, prepare, proof_size, prove, verify};
 
@@ -92,7 +92,7 @@ pub fn prove_poseidon2(
         log_length: log_n_rows,
         constants,
     };
-    let prepared = prepare::<Poseidon2Circuit, _, 8>(&proving_settings, poseidon_circuit);
+    let prepared = prepare::<Poseidon2Circuit, _, F, EF, 8>(&proving_settings, poseidon_circuit);
     let proof = prove(&prepared, &inputs);
 
     let prover_time = t.elapsed();
@@ -106,7 +106,7 @@ pub fn prove_poseidon2(
         verifier_time = time.elapsed();
     }
 
-    let proof_size = proof_size::<Poseidon2Circuit, 8>(&proof) as f64;
+    let proof_size = proof_size(&proof) as f64;
 
     Poseidon2Benchmark {
         log_n_rows,

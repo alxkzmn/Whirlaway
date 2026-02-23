@@ -7,7 +7,7 @@ use p3_symmetric::CryptographicHasher;
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::whir::proof::{QueryOpening, SumcheckData, WhirProof, WhirRoundProof};
 
-use crate::circuits::keccak256::{EF, F, Keccak256Circuit};
+use crate::circuits::keccak256::{Binomial8Challenge, F, Keccak256Circuit};
 use crate::hashers::digest_bytes32_to_u64;
 use crate::hashers::{KECCAK_DIGEST_ELEMS, digest_u64_to_bytes32};
 use crate::proving_system::Proof as SystemProof;
@@ -19,9 +19,14 @@ pub const VERIFY_FUNCTION: &str = "verify(bytes)";
 const EXTENSION_LIMBS: usize = 8;
 
 pub type Val = F;
-pub type Challenge = EF;
+pub type Challenge = Binomial8Challenge;
 pub type WhirPcsProof = WhirProof<Val, Challenge, u64, KECCAK_DIGEST_ELEMS>;
-pub type KeccakProof = SystemProof<Keccak256Circuit, { KECCAK_DIGEST_ELEMS }>;
+pub type KeccakProof = SystemProof<
+    Keccak256Circuit<Binomial8Challenge>,
+    F,
+    Binomial8Challenge,
+    { KECCAK_DIGEST_ELEMS },
+>;
 
 #[derive(Debug, Clone, Default)]
 pub struct ProofBlobOffsets {

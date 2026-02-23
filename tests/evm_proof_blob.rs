@@ -9,7 +9,7 @@ use whir_p3::whir::proof::SumcheckData;
 use whirlaway::circuits::keccak256::{EF, F, Keccak256Circuit, Keccak256Input};
 use whirlaway::evm_codec;
 use whirlaway::hashers::KECCAK_DIGEST_ELEMS;
-use whirlaway::proving_system::{self, Circuit, KeccakProvingSystemConfig, Prepared};
+use whirlaway::proving_system::{self, KeccakProvingSystemConfig, Prepared};
 
 use evm_codec::{
     decode_proof_blob_v1, decode_verify_bytes_calldata, encode_calldata_verify_bytes,
@@ -18,8 +18,8 @@ use evm_codec::{
 };
 
 type PreparedKeccak =
-    Prepared<Keccak256Circuit, KeccakProvingSystemConfig, { KECCAK_DIGEST_ELEMS }>;
-type KeccakProof = proving_system::Proof<Keccak256Circuit, { KECCAK_DIGEST_ELEMS }>;
+    Prepared<Keccak256Circuit<EF>, KeccakProvingSystemConfig<EF>, F, EF, { KECCAK_DIGEST_ELEMS }>;
+type KeccakProof = proving_system::Proof<Keccak256Circuit<EF>, F, EF, { KECCAK_DIGEST_ELEMS }>;
 
 struct Fixture {
     prepared: PreparedKeccak,
@@ -69,16 +69,9 @@ fn build_fixture() -> Fixture {
         expected_digest,
     };
 
-    let config = KeccakProvingSystemConfig {
-        air_settings: settings(),
-    };
-    let prepared = proving_system::prepare::<Keccak256Circuit, _, { KECCAK_DIGEST_ELEMS }>(
-        &config,
-        Keccak256Circuit {
-            input_size: message_len,
-        },
-    );
-    let public_values = Keccak256Circuit::public_values(&prepared.circuit, &input);
+    let config = KeccakProvingSystemConfig::<EF>::new(settings());
+    let prepared = proving_system::prepare(&config, Keccak256Circuit::new(message_len));
+    let public_values = Keccak256Circuit::<EF>::public_values(&prepared.circuit, &input);
     let proof = proving_system::prove(&prepared, &input);
     proving_system::verify(&prepared, &proof, &public_values).unwrap();
 

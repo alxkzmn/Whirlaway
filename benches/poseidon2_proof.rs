@@ -5,8 +5,8 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 use whir_p3::{parameters::FoldingFactor, parameters::errors::SecurityAssumption};
 
 use whirlaway::circuits::poseidon2::{
-    Challenger as MyChallenger, F, HALF_FULL_ROUNDS, MerkleCompress, MerkleHash, PARTIAL_ROUNDS,
-    Poseidon2Circuit, Poseidon16, Poseidon24, WIDTH,
+    Challenger as MyChallenger, EF, F, HALF_FULL_ROUNDS, MerkleCompress, MerkleHash,
+    PARTIAL_ROUNDS, Poseidon2Circuit, Poseidon16, Poseidon24, WIDTH,
 };
 use whirlaway::proving_system::{ProvingSystemConfig, prepare, prove, verify};
 
@@ -46,7 +46,7 @@ fn bench(c: &mut Criterion) {
                     log_length: *log_n_rows,
                     constants: constants.clone(),
                 };
-                let prepared = prepare::<Poseidon2Circuit, _, 8>(&proving_settings, circuit);
+                let prepared = prepare::<Poseidon2Circuit, _, F, EF, 8>(&proving_settings, circuit);
 
                 b.iter(|| {
                     // The witness generation is included because ProveKit doesn't separate witness generation and proving.
@@ -68,7 +68,7 @@ fn bench(c: &mut Criterion) {
         log_length: log_n_rows,
         constants: constants.clone(),
     };
-    let prepared = prepare::<Poseidon2Circuit, _, 8>(&proving_settings, circuit);
+    let prepared = prepare::<Poseidon2Circuit, _, F, EF, 8>(&proving_settings, circuit);
     let n_rows = 1 << log_n_rows;
     let inputs: Vec<[F; WIDTH]> = (0..n_rows)
         .map(|_| std::array::from_fn(|_| rng.random()))
