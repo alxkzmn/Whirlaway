@@ -3,9 +3,6 @@ name = "whirlaway-utils"
 version.workspace = true
 edition.workspace = true
 
-[lints]
-workspace = true
-
 [dependencies]
 p3-field.workspace = true
 p3-challenger.workspace = true
