@@ -3,7 +3,7 @@ use p3_field::{
     ExtensionField, PrimeCharacteristicRing, TwoAdicField, extension::BinomialExtensionField,
 };
 use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use sumcheck::{SumcheckGrinding, prove, verify, verify_with_univariate_skip};
 use utils::fiat_shamir::{ProverState, VerifierState};
 use whir_p3::{fiat_shamir::domain_separator::DomainSeparator, poly::evals::EvaluationsList};
