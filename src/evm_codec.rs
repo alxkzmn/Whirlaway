@@ -1,16 +1,16 @@
 use core::fmt;
 
 use p3_field::PrimeCharacteristicRing;
-use p3_field::{BasedVectorSpace, PrimeField32};
+use p3_field::{BasedVectorSpace, ExtensionField, PrimeField32, TwoAdicField};
 use p3_keccak::Keccak256Hash;
 use p3_symmetric::CryptographicHasher;
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::whir::merkle_multiproof::MerkleMultiProof;
 use whir_p3::whir::proof::{QueryBatchOpening, SumcheckData, WhirProof, WhirRoundProof};
 
-use crate::circuits::keccak256::{Binomial8Challenge, Keccak256Circuit, F};
+use crate::circuits::keccak256::{Binomial8Challenge, F, Keccak256Circuit};
 use crate::hashers::digest_bytes32_to_u64;
-use crate::hashers::{digest_u64_to_bytes32, KECCAK_DIGEST_ELEMS};
+use crate::hashers::{KECCAK_DIGEST_ELEMS, digest_u64_to_bytes32};
 use crate::proving_system::Proof as SystemProof;
 
 pub const PROOF_BLOB_MAGIC: [u8; 4] = *b"WPK1";
@@ -65,13 +65,33 @@ impl fmt::Display for DecodeError {
 impl std::error::Error for DecodeError {}
 
 pub fn encode_proof_blob_v1(public_values: &[Val], proof: &KeccakProof) -> Vec<u8> {
-    encode_proof_blob_v1_with_offsets(public_values, proof).0
+    encode_proof_blob_v1_generic(public_values, proof)
 }
 
 pub fn encode_proof_blob_v1_with_offsets(
     public_values: &[Val],
     proof: &KeccakProof,
 ) -> (Vec<u8>, ProofBlobOffsets) {
+    encode_proof_blob_v1_generic_with_offsets(public_values, proof)
+}
+
+pub fn encode_proof_blob_v1_generic<EF>(
+    public_values: &[Val],
+    proof: &SystemProof<Keccak256Circuit<EF>, F, EF, { KECCAK_DIGEST_ELEMS }>,
+) -> Vec<u8>
+where
+    EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
+{
+    encode_proof_blob_v1_generic_with_offsets(public_values, proof).0
+}
+
+pub fn encode_proof_blob_v1_generic_with_offsets<EF>(
+    public_values: &[Val],
+    proof: &SystemProof<Keccak256Circuit<EF>, F, EF, { KECCAK_DIGEST_ELEMS }>,
+) -> (Vec<u8>, ProofBlobOffsets)
+where
+    EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
+{
     let mut writer = BlobWriter::new();
     let mut offsets = ProofBlobOffsets::default();
 
@@ -93,11 +113,13 @@ pub fn encode_proof_blob_v1_with_offsets(
     (writer.finish(), offsets)
 }
 
-fn encode_whir_proof(
+fn encode_whir_proof<EF>(
     writer: &mut BlobWriter,
-    proof: &WhirPcsProof,
+    proof: &WhirProof<Val, EF, u64, KECCAK_DIGEST_ELEMS>,
     offsets: &mut ProofBlobOffsets,
-) {
+) where
+    EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
+{
     offsets.commitment_offset = Some(writer.pos());
     writer.write_digest(&proof.initial_commitment);
 
@@ -136,11 +158,13 @@ fn encode_whir_proof(
     });
 }
 
-fn encode_whir_round(
+fn encode_whir_round<EF>(
     writer: &mut BlobWriter,
-    round: &WhirRoundProof<Val, Challenge, u64, KECCAK_DIGEST_ELEMS>,
+    round: &WhirRoundProof<Val, EF, u64, KECCAK_DIGEST_ELEMS>,
     offsets: &mut ProofBlobOffsets,
-) {
+) where
+    EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
+{
     writer.write_digest(&round.commitment);
 
     writer.write_len(round.ood_answers.len());
@@ -159,11 +183,13 @@ fn encode_whir_round(
     encode_whir_sumcheck(writer, &round.sumcheck, offsets);
 }
 
-fn encode_whir_sumcheck(
+fn encode_whir_sumcheck<EF>(
     writer: &mut BlobWriter,
-    sumcheck: &SumcheckData<Val, Challenge>,
+    sumcheck: &SumcheckData<Val, EF>,
     offsets: &mut ProofBlobOffsets,
-) {
+) where
+    EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
+{
     writer.write_len(sumcheck.polynomial_evaluations.len());
     for coeffs in &sumcheck.polynomial_evaluations {
         writer.write_challenge_marked(coeffs[0], &mut offsets.first_sumcheck_coeff_offset);
@@ -176,11 +202,13 @@ fn encode_whir_sumcheck(
     }
 }
 
-fn encode_query_batch(
+fn encode_query_batch<EF>(
     writer: &mut BlobWriter,
-    query: &QueryBatchOpening<Val, Challenge, u64, KECCAK_DIGEST_ELEMS>,
+    query: &QueryBatchOpening<Val, EF, u64, KECCAK_DIGEST_ELEMS>,
     offsets: &mut ProofBlobOffsets,
-) {
+) where
+    EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
+{
     match query {
         QueryBatchOpening::Base { values, proof } => {
             writer.write_u8(0);
@@ -543,13 +571,19 @@ impl BlobWriter {
             .extend_from_slice(&value.as_canonical_u32().to_be_bytes());
     }
 
-    fn write_challenge(&mut self, value: Challenge) {
-        for limb in Challenge::flatten_to_base(vec![value]) {
+    fn write_challenge<EF>(&mut self, value: EF)
+    where
+        EF: BasedVectorSpace<Val> + Copy,
+    {
+        for &limb in value.as_basis_coefficients_slice() {
             self.write_val(limb);
         }
     }
 
-    fn write_challenge_marked(&mut self, value: Challenge, marker: &mut Option<usize>) {
+    fn write_challenge_marked<EF>(&mut self, value: EF, marker: &mut Option<usize>)
+    where
+        EF: BasedVectorSpace<Val> + Copy,
+    {
         if marker.is_none() {
             *marker = Some(self.pos());
         }
@@ -715,9 +749,5 @@ fn encode_abi_word_usize(value: usize) -> [u8; 32] {
 
 const fn pad32(len: usize) -> usize {
     let rem = len % 32;
-    if rem == 0 {
-        len
-    } else {
-        len + (32 - rem)
-    }
+    if rem == 0 { len } else { len + (32 - rem) }
 }
