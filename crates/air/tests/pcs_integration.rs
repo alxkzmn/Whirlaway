@@ -9,11 +9,13 @@ use whir_p3::{
     fiat_shamir::domain_separator::DomainSeparator,
     poly::multilinear::MultilinearPoint,
     whir::{
-        committer::reader::CommitmentReader, committer::writer::CommitmentWriter,
+        committer::reader::CommitmentReader,
+        committer::writer::CommitmentWriter,
         constraints::statement::EqStatement,
         parameters::{SumcheckStrategy, WhirConfig},
         proof::WhirProof,
-        prover::Prover, verifier::Verifier,
+        prover::Prover,
+        verifier::Verifier,
     },
 };
 
