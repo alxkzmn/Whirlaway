@@ -2,7 +2,17 @@
 
 This repository is a Rust workspace implementing a hash-based SNARK. Most “interesting” correctness is in the IOP stack (sumcheck + AIR) and in PCS openings (via `whir-p3`). When writing or modifying tests here, there are several repo-specific gotchas that are easy to rediscover the hard way.
 
-## How to run tests (known-good)
+## Optimization objective (in order)
+
+- Primary target: **smallest on-chain verifier**:
+  - Reduce proof/calldata size.
+  - Keep verifier logic/work simple.
+- Constraint: preserve **client-side feasibility**:
+  - Proving time must remain practical.
+  - Peak RAM must remain practical.
+  - Do not trade small proof-size wins for large prover regressions.
+
+## How to run tests
 
 - **Run everything**: `cargo test --workspace`
 - **Single crate**:
