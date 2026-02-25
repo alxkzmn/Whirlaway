@@ -6,11 +6,12 @@ use keccak_air::{NUM_ROUNDS, RATE_BYTES};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use sha3::Digest;
+use whir_p3::metrics::{reset_hash_counters, snapshot_hash_counters};
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 use whirlaway::circuits::keccak256::{EF, Keccak256Circuit, Keccak256Input};
 use whirlaway::evm_codec;
 use whirlaway::evm_codec::{
-    encode_calldata_verify_bytes, encode_proof_blob_v1, render_json_payload,
+    encode_calldata_verify_bytes, encode_proof_blob_v2, render_json_payload_with_metrics,
 };
 use whirlaway::proving_system::{KeccakProvingSystemConfig, prepare, prove, verify};
 
@@ -161,15 +162,25 @@ fn run() -> Result<(), String> {
     };
 
     let public_values = Keccak256Circuit::<EF>::public_values(&prepared.circuit, &input);
+    reset_hash_counters();
     let proof = prove(&prepared, &input);
+    let hash_counts_prover = snapshot_hash_counters();
+    reset_hash_counters();
     verify(&prepared, &proof, &public_values)
         .map_err(|err| format!("generated proof failed verification: {err}"))?;
+    let hash_counts_verifier = snapshot_hash_counters();
 
-    let proof_blob = encode_proof_blob_v1(&public_values, &proof);
+    let proof_blob = encode_proof_blob_v2(&public_values, &proof);
     let calldata = encode_calldata_verify_bytes(&proof_blob);
 
     let output = match cli.format {
-        OutputFormat::Json => render_json_payload(&proof_blob, &calldata, cli.pretty),
+        OutputFormat::Json => render_json_payload_with_metrics(
+            &proof_blob,
+            &calldata,
+            hash_counts_prover.into(),
+            hash_counts_verifier.into(),
+            cli.pretty,
+        ),
         OutputFormat::Calldata => evm_codec::hex_prefixed(&calldata),
     };
 

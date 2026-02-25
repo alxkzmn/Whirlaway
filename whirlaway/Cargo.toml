@@ -34,6 +34,11 @@ utils = { package = "whirlaway-utils", path = "../crates/utils" }
 bincode = "1.3.3"
 serde = { version = "1.0.219", features = ["derive"] }
 
+[features]
+default = ["hash_count"]
+hash_count = ["whir-p3/hash_count"]
+keccak_no_prefix = []
+
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 utils = { package = "whirlaway-utils", path = "../crates/utils" }
