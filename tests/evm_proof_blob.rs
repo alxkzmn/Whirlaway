@@ -8,7 +8,10 @@ use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::whir::proof::{QueryBatchOpening, SumcheckData};
 use whirlaway::circuits::keccak256::{EF, F, Keccak256Circuit, Keccak256Input};
 use whirlaway::evm_codec;
-use whirlaway::hashers::{KECCAK_DIGEST_ELEMS, effective_digest_bytes_for_security_bits};
+use whirlaway::hashers::{
+    KECCAK_DIGEST_ELEMS, effective_digest_bytes_for_security_bits,
+    resolve_effective_merkle_security_bits,
+};
 use whirlaway::proving_system::{self, KeccakProvingSystemConfig, Prepared};
 
 use evm_codec::{
@@ -62,6 +65,13 @@ fn settings(security_bits: usize) -> AirSettings {
 }
 
 fn build_fixture_with_security_bits(security_bits: usize) -> Fixture {
+    build_fixture_with_security_and_merkle_override(security_bits, None)
+}
+
+fn build_fixture_with_security_and_merkle_override(
+    security_bits: usize,
+    merkle_security_bits_override: Option<usize>,
+) -> Fixture {
     let message_len = message_len_for_log_length(6);
     let mut rng = StdRng::seed_from_u64(0);
     let message: Vec<u8> = (0..message_len).map(|_| rng.random()).collect();
@@ -71,7 +81,9 @@ fn build_fixture_with_security_bits(security_bits: usize) -> Fixture {
         expected_digest,
     };
 
-    let config = KeccakProvingSystemConfig::<EF>::new(settings(security_bits));
+    let config = KeccakProvingSystemConfig::<EF>::new(
+        settings(security_bits).with_merkle_security_bits_override(merkle_security_bits_override),
+    );
     let prepared = proving_system::prepare(&config, Keccak256Circuit::new(message_len));
     let public_values = Keccak256Circuit::<EF>::public_values(&prepared.circuit, &input);
     let proof = proving_system::prove(&prepared, &input);
@@ -360,6 +372,45 @@ fn v3_matches_v2_for_128() {
     let calldata_v2 = encode_calldata_verify_bytes(&blob_v2);
     let calldata_v3 = encode_calldata_verify_bytes(&blob_v3);
     assert_eq!(calldata_v3.len(), calldata_v2.len());
+}
+
+#[test]
+fn v3_truncated_blob_roundtrip_with_merkle_override_for_128_to_80() {
+    let fixture = build_fixture_with_security_and_merkle_override(128, Some(80));
+    let merkle_security_bits = resolve_effective_merkle_security_bits(128, Some(80));
+    let digest_bytes = effective_digest_bytes_for_security_bits(merkle_security_bits);
+    assert_eq!(digest_bytes, 20);
+
+    let blob_v2 = encode_proof_blob_v2(&fixture.public_values, &fixture.proof);
+    let blob_v3 = encode_proof_blob_v3(&fixture.public_values, &fixture.proof, digest_bytes);
+    assert!(
+        blob_v3.len() < blob_v2.len(),
+        "expected v3 blob ({}) to be smaller than v2 ({})",
+        blob_v3.len(),
+        blob_v2.len()
+    );
+
+    let calldata_v2 = encode_calldata_verify_bytes(&blob_v2);
+    let calldata_v3 = encode_calldata_verify_bytes(&blob_v3);
+    assert!(
+        calldata_v3.len() < calldata_v2.len(),
+        "expected v3 calldata ({}) to be smaller than v2 ({})",
+        calldata_v3.len(),
+        calldata_v2.len()
+    );
+
+    let ctx = derive_v3_decode_context_with_digest_bytes(&fixture.proof, digest_bytes)
+        .expect("v3 context derivation failed");
+    let decoded = decode_proof_blob_v3_with_context(&blob_v3, &ctx).expect("v3 decode failed");
+    proving_system::verify(&fixture.prepared, &decoded.proof, &decoded.public_values)
+        .expect("v3 decoded proof should verify");
+
+    let bad_ctx = derive_v3_decode_context_with_digest_bytes(&fixture.proof, 32)
+        .expect("v3 context derivation failed");
+    assert!(
+        decode_proof_blob_v3_with_context(&blob_v3, &bad_ctx).is_err(),
+        "v3 decode with wrong digest width context should fail"
+    );
 }
 
 #[test]
