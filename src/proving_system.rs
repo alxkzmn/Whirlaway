@@ -11,7 +11,10 @@ use whir_p3::fiat_shamir::domain_separator::DomainSeparator;
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::whir::proof::WhirProof;
 
-use crate::hashers::{KECCAK_DIGEST_ELEMS, KeccakNodeCompress, KeccakU32BeLeafHasher};
+use crate::hashers::{
+    KECCAK_DIGEST_ELEMS, KeccakNodeCompress, KeccakU32BeLeafHasher,
+    resolve_effective_merkle_security_bits,
+};
 
 pub trait ProvingSystemSettings<
     C,
@@ -129,11 +132,19 @@ impl<EF: ExtensionField<crate::circuits::keccak256::F> + TwoAdicField>
     }
 
     fn merkle_hash(&self) -> Self::MerkleHash {
-        KeccakU32BeLeafHasher::for_security_bits(self.air_settings.security_bits)
+        let effective_merkle_security_bits = resolve_effective_merkle_security_bits(
+            self.air_settings.security_bits,
+            self.air_settings.merkle_security_bits_override,
+        );
+        KeccakU32BeLeafHasher::for_security_bits(effective_merkle_security_bits)
     }
 
     fn merkle_compress(&self) -> Self::MerkleCompress {
-        KeccakNodeCompress::for_security_bits(self.air_settings.security_bits)
+        let effective_merkle_security_bits = resolve_effective_merkle_security_bits(
+            self.air_settings.security_bits,
+            self.air_settings.merkle_security_bits_override,
+        );
+        KeccakNodeCompress::for_security_bits(effective_merkle_security_bits)
     }
 
     fn new_challenger(&self) -> Self::Challenger {
