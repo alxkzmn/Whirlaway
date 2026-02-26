@@ -11,14 +11,20 @@ use whir_p3::whir::proof::{QueryBatchOpening, SumcheckData, WhirProof, WhirRound
 
 use crate::circuits::keccak256::{Binomial8Challenge, F, Keccak256Circuit};
 use crate::hashers::digest_bytes32_to_u64;
-use crate::hashers::{KECCAK_DIGEST_ELEMS, digest_u64_to_bytes32};
+use crate::hashers::{
+    KECCAK_DIGEST_ELEMS, digest_u64_to_bytes32, effective_digest_bytes_for_security_bits,
+};
 use crate::proving_system::Proof as SystemProof;
 
 pub const PROOF_BLOB_MAGIC: [u8; 4] = *b"WPK1";
-pub const PROOF_BLOB_VERSION: u8 = 2;
-pub const JSON_SCHEMA: &str = "p3-whirlaway-evm-proof-v2";
 pub const PROOF_BLOB_VERSION_V1: u8 = 1;
+pub const PROOF_BLOB_VERSION_V2: u8 = 2;
+pub const PROOF_BLOB_VERSION_V3: u8 = 3;
+pub const PROOF_BLOB_VERSION: u8 = PROOF_BLOB_VERSION_V2;
 pub const JSON_SCHEMA_V1: &str = "p3-whirlaway-evm-proof-v1";
+pub const JSON_SCHEMA_V2: &str = "p3-whirlaway-evm-proof-v2";
+pub const JSON_SCHEMA_V3: &str = "p3-whirlaway-evm-proof-v3";
+pub const JSON_SCHEMA: &str = JSON_SCHEMA_V2;
 pub const VERIFY_FUNCTION: &str = "verify(bytes)";
 const EXTENSION_LIMBS: usize = 8;
 
@@ -47,6 +53,13 @@ impl From<HashCountSnapshot> for HashCountJson {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Eq, PartialEq)]
+pub struct MerkleJsonMetrics {
+    pub masked_digest_bytes: usize,
+    pub masked_digest_bits: usize,
+    pub total_merkle_digest_count: usize,
+}
+
 #[must_use]
 pub const fn keccak_mode_label() -> &'static str {
     if cfg!(feature = "keccak_no_prefix") {
@@ -54,6 +67,22 @@ pub const fn keccak_mode_label() -> &'static str {
     } else {
         "prefixed"
     }
+}
+
+#[must_use]
+pub const fn clamp_effective_digest_bytes(effective_digest_bytes: usize) -> usize {
+    if effective_digest_bytes == 0 {
+        1
+    } else if effective_digest_bytes > 32 {
+        32
+    } else {
+        effective_digest_bytes
+    }
+}
+
+#[must_use]
+pub const fn effective_digest_bytes_for_v3_security_bits(security_bits: usize) -> usize {
+    effective_digest_bytes_for_security_bits(security_bits)
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -71,17 +100,21 @@ pub struct QueryBatchShape {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct WhirProofV3Shape {
+pub struct WhirProofV2Shape {
     pub round_shapes: Vec<QueryBatchShape>,
     pub final_shape: QueryBatchShape,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ProofBlobV3DecodeContext {
-    pub whir_shape: WhirProofV3Shape,
+pub struct ProofBlobV2DecodeContext {
+    pub whir_shape: WhirProofV2Shape,
 }
 
-pub type ProofBlobV2DecodeContext = ProofBlobV3DecodeContext;
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct ProofBlobV3DecodeContext {
+    pub whir_shape: WhirProofV2Shape,
+    pub effective_digest_bytes: usize,
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct ProofBlobOffsets {
@@ -146,7 +179,7 @@ pub fn encode_proof_blob_v1_generic_with_offsets<EF>(
 where
     EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
 {
-    encode_proof_blob_generic_with_offsets(public_values, proof, PROOF_BLOB_VERSION_V1, false)
+    encode_proof_blob_generic_with_offsets(public_values, proof, PROOF_BLOB_VERSION_V1, false, 32)
 }
 
 pub fn encode_proof_blob_v2(public_values: &[Val], proof: &KeccakProof) -> Vec<u8> {
@@ -177,7 +210,51 @@ pub fn encode_proof_blob_v2_generic_with_offsets<EF>(
 where
     EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
 {
-    encode_proof_blob_generic_with_offsets(public_values, proof, PROOF_BLOB_VERSION, true)
+    encode_proof_blob_generic_with_offsets(public_values, proof, PROOF_BLOB_VERSION_V2, true, 32)
+}
+
+pub fn encode_proof_blob_v3(
+    public_values: &[Val],
+    proof: &KeccakProof,
+    effective_digest_bytes: usize,
+) -> Vec<u8> {
+    encode_proof_blob_v3_generic(public_values, proof, effective_digest_bytes)
+}
+
+pub fn encode_proof_blob_v3_with_offsets(
+    public_values: &[Val],
+    proof: &KeccakProof,
+    effective_digest_bytes: usize,
+) -> (Vec<u8>, ProofBlobOffsets) {
+    encode_proof_blob_v3_generic_with_offsets(public_values, proof, effective_digest_bytes)
+}
+
+pub fn encode_proof_blob_v3_generic<EF>(
+    public_values: &[Val],
+    proof: &SystemProof<Keccak256Circuit<EF>, F, EF, { KECCAK_DIGEST_ELEMS }>,
+    effective_digest_bytes: usize,
+) -> Vec<u8>
+where
+    EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
+{
+    encode_proof_blob_v3_generic_with_offsets(public_values, proof, effective_digest_bytes).0
+}
+
+pub fn encode_proof_blob_v3_generic_with_offsets<EF>(
+    public_values: &[Val],
+    proof: &SystemProof<Keccak256Circuit<EF>, F, EF, { KECCAK_DIGEST_ELEMS }>,
+    effective_digest_bytes: usize,
+) -> (Vec<u8>, ProofBlobOffsets)
+where
+    EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
+{
+    encode_proof_blob_generic_with_offsets(
+        public_values,
+        proof,
+        PROOF_BLOB_VERSION_V3,
+        true,
+        clamp_effective_digest_bytes(effective_digest_bytes),
+    )
 }
 
 fn encode_proof_blob_generic_with_offsets<EF>(
@@ -185,11 +262,12 @@ fn encode_proof_blob_generic_with_offsets<EF>(
     proof: &SystemProof<Keccak256Circuit<EF>, F, EF, { KECCAK_DIGEST_ELEMS }>,
     version: u8,
     compact_queries: bool,
+    digest_bytes: usize,
 ) -> (Vec<u8>, ProofBlobOffsets)
 where
     EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
 {
-    let mut writer = BlobWriter::new();
+    let mut writer = BlobWriter::new(clamp_effective_digest_bytes(digest_bytes));
     let mut offsets = ProofBlobOffsets::default();
 
     writer.write_bytes(&PROOF_BLOB_MAGIC);
@@ -373,11 +451,33 @@ fn encode_query_batch<EF>(
 }
 
 pub fn decode_proof_blob_v1(bytes: &[u8]) -> Result<DecodedProofBlob, DecodeError> {
-    decode_proof_blob_v1_with_context(bytes, None)
+    decode_proof_blob_with_contexts(bytes, None, None)
 }
 
 pub fn decode_proof_blob_v1_with_context(
     bytes: &[u8],
+    v2_context: Option<&ProofBlobV2DecodeContext>,
+) -> Result<DecodedProofBlob, DecodeError> {
+    decode_proof_blob_with_contexts(bytes, v2_context, None)
+}
+
+pub fn decode_proof_blob_v2_with_context(
+    bytes: &[u8],
+    v2_context: &ProofBlobV2DecodeContext,
+) -> Result<DecodedProofBlob, DecodeError> {
+    decode_proof_blob_with_contexts(bytes, Some(v2_context), None)
+}
+
+pub fn decode_proof_blob_v3_with_context(
+    bytes: &[u8],
+    v3_context: &ProofBlobV3DecodeContext,
+) -> Result<DecodedProofBlob, DecodeError> {
+    decode_proof_blob_with_contexts(bytes, None, Some(v3_context))
+}
+
+pub fn decode_proof_blob_with_contexts(
+    bytes: &[u8],
+    v2_context: Option<&ProofBlobV2DecodeContext>,
     v3_context: Option<&ProofBlobV3DecodeContext>,
 ) -> Result<DecodedProofBlob, DecodeError> {
     let mut reader = BlobReader::new(bytes);
@@ -389,48 +489,59 @@ pub fn decode_proof_blob_v1_with_context(
 
     let version = reader.read_u8()?;
     match version {
-        PROOF_BLOB_VERSION_V1 => decode_proof_blob_v2_payload(&mut reader),
-        PROOF_BLOB_VERSION => {
-            let Some(ctx) = v3_context else {
+        PROOF_BLOB_VERSION_V1 => decode_proof_blob_v1_payload(&mut reader),
+        PROOF_BLOB_VERSION_V2 => {
+            let Some(ctx) = v2_context else {
                 return Err(DecodeError::new(
                     "v2 compact proof decoding requires explicit shape context",
                 ));
             };
-            decode_proof_blob_v3_payload(&mut reader, ctx)
+            decode_proof_blob_v2_payload_compact(&mut reader, &ctx.whir_shape, 32)
+        }
+        PROOF_BLOB_VERSION_V3 => {
+            let Some(ctx) = v3_context else {
+                return Err(DecodeError::new(
+                    "v3 compact proof decoding requires explicit v3 context",
+                ));
+            };
+            decode_proof_blob_v2_payload_compact(
+                &mut reader,
+                &ctx.whir_shape,
+                clamp_effective_digest_bytes(ctx.effective_digest_bytes),
+            )
         }
         _ => Err(DecodeError::new("unsupported proof blob version")),
     }
 }
 
-pub fn decode_proof_blob_v3_with_context(
-    bytes: &[u8],
-    v3_context: &ProofBlobV3DecodeContext,
-) -> Result<DecodedProofBlob, DecodeError> {
-    decode_proof_blob_v1_with_context(bytes, Some(v3_context))
-}
-
-pub fn decode_proof_blob_v2_with_context(
-    bytes: &[u8],
-    v2_context: &ProofBlobV2DecodeContext,
-) -> Result<DecodedProofBlob, DecodeError> {
-    decode_proof_blob_v3_with_context(bytes, v2_context)
+pub fn derive_v2_decode_context(
+    proof: &KeccakProof,
+) -> Result<ProofBlobV2DecodeContext, DecodeError> {
+    Ok(ProofBlobV2DecodeContext {
+        whir_shape: derive_whir_v2_shape(&proof.whir_proof)?,
+    })
 }
 
 pub fn derive_v3_decode_context(
     proof: &KeccakProof,
 ) -> Result<ProofBlobV3DecodeContext, DecodeError> {
     Ok(ProofBlobV3DecodeContext {
-        whir_shape: derive_whir_v3_shape(&proof.whir_proof)?,
+        whir_shape: derive_whir_v2_shape(&proof.whir_proof)?,
+        effective_digest_bytes: 32,
     })
 }
 
-pub fn derive_v2_decode_context(
+pub fn derive_v3_decode_context_with_digest_bytes(
     proof: &KeccakProof,
-) -> Result<ProofBlobV2DecodeContext, DecodeError> {
-    derive_v3_decode_context(proof)
+    effective_digest_bytes: usize,
+) -> Result<ProofBlobV3DecodeContext, DecodeError> {
+    Ok(ProofBlobV3DecodeContext {
+        whir_shape: derive_whir_v2_shape(&proof.whir_proof)?,
+        effective_digest_bytes: clamp_effective_digest_bytes(effective_digest_bytes),
+    })
 }
 
-fn derive_whir_v3_shape(proof: &WhirPcsProof) -> Result<WhirProofV3Shape, DecodeError> {
+fn derive_whir_v2_shape(proof: &WhirPcsProof) -> Result<WhirProofV2Shape, DecodeError> {
     let mut round_shapes = Vec::with_capacity(proof.rounds.len());
     for round in &proof.rounds {
         let Some(query_batch) = round.query_batch.as_ref() else {
@@ -446,7 +557,7 @@ fn derive_whir_v3_shape(proof: &WhirPcsProof) -> Result<WhirProofV3Shape, Decode
         ));
     };
 
-    Ok(WhirProofV3Shape {
+    Ok(WhirProofV2Shape {
         round_shapes,
         final_shape: shape_from_query_batch(final_query_batch),
     })
@@ -524,7 +635,7 @@ pub fn derive_query_batch_shape_from_context(
     })
 }
 
-fn decode_proof_blob_v2_payload(
+fn decode_proof_blob_v1_payload(
     reader: &mut BlobReader<'_>,
 ) -> Result<DecodedProofBlob, DecodeError> {
     let n_public_values = reader.read_len()?;
@@ -553,10 +664,13 @@ fn decode_proof_blob_v2_payload(
     })
 }
 
-fn decode_proof_blob_v3_payload(
+fn decode_proof_blob_v2_payload_compact(
     reader: &mut BlobReader<'_>,
-    context: &ProofBlobV3DecodeContext,
+    whir_shape: &WhirProofV2Shape,
+    digest_bytes: usize,
 ) -> Result<DecodedProofBlob, DecodeError> {
+    reader.set_digest_bytes(digest_bytes);
+
     let n_public_values = reader.read_len()?;
     let mut public_values = Vec::with_capacity(n_public_values);
     for _ in 0..n_public_values {
@@ -569,7 +683,7 @@ fn decode_proof_blob_v3_payload(
         proof_data.push(reader.read_challenge()?);
     }
 
-    let whir_proof = decode_whir_proof_v3(reader, &context.whir_shape)?;
+    let whir_proof = decode_whir_proof_v2_compact(reader, whir_shape)?;
     if !reader.is_eof() {
         return Err(DecodeError::new("trailing bytes after proof payload"));
     }
@@ -730,9 +844,9 @@ fn decode_query_batch_v2(
     }
 }
 
-fn decode_whir_proof_v3(
+fn decode_whir_proof_v2_compact(
     reader: &mut BlobReader<'_>,
-    shape: &WhirProofV3Shape,
+    shape: &WhirProofV2Shape,
 ) -> Result<WhirPcsProof, DecodeError> {
     let initial_commitment = reader.read_digest()?;
 
@@ -746,11 +860,11 @@ fn decode_whir_proof_v3(
 
     let n_rounds = reader.read_len()?;
     if n_rounds != shape.round_shapes.len() {
-        return Err(DecodeError::new("v3 shape context round count mismatch"));
+        return Err(DecodeError::new("v2 shape context round count mismatch"));
     }
     let mut rounds = Vec::with_capacity(n_rounds);
     for round_shape in &shape.round_shapes {
-        rounds.push(decode_whir_round_v3(reader, round_shape)?);
+        rounds.push(decode_whir_round_v2_compact(reader, round_shape)?);
     }
 
     let final_poly = reader.read_option(|reader| {
@@ -766,7 +880,7 @@ fn decode_whir_proof_v3(
     })?;
 
     let final_pow_witness = reader.read_val()?;
-    let final_query_batch = decode_query_batch_v3(reader, &shape.final_shape)?;
+    let final_query_batch = decode_query_batch_v2_compact(reader, &shape.final_shape)?;
     let final_sumcheck = reader.read_option(decode_whir_sumcheck)?;
 
     Ok(WhirPcsProof {
@@ -781,7 +895,7 @@ fn decode_whir_proof_v3(
     })
 }
 
-fn decode_whir_round_v3(
+fn decode_whir_round_v2_compact(
     reader: &mut BlobReader<'_>,
     shape: &QueryBatchShape,
 ) -> Result<WhirRoundProof<Val, Challenge, u64, KECCAK_DIGEST_ELEMS>, DecodeError> {
@@ -794,7 +908,7 @@ fn decode_whir_round_v3(
     }
 
     let pow_witness = reader.read_val()?;
-    let query_batch = decode_query_batch_v3(reader, shape)?;
+    let query_batch = decode_query_batch_v2_compact(reader, shape)?;
     let sumcheck = decode_whir_sumcheck(reader)?;
 
     Ok(WhirRoundProof {
@@ -806,7 +920,7 @@ fn decode_whir_round_v3(
     })
 }
 
-fn decode_query_batch_v3(
+fn decode_query_batch_v2_compact(
     reader: &mut BlobReader<'_>,
     shape: &QueryBatchShape,
 ) -> Result<QueryBatchOpening<Val, Challenge, u64, KECCAK_DIGEST_ELEMS>, DecodeError> {
@@ -904,12 +1018,71 @@ pub fn decode_verify_bytes_calldata(calldata: &[u8]) -> Result<Vec<u8>, DecodeEr
     Ok(args[data_start..data_end].to_vec())
 }
 
+#[must_use]
+pub fn estimate_calldata_gas(calldata: &[u8]) -> u64 {
+    let zero_bytes = calldata.iter().filter(|&&b| b == 0).count() as u64;
+    let nonzero_bytes = calldata.len() as u64 - zero_bytes;
+    zero_bytes.saturating_mul(4) + nonzero_bytes.saturating_mul(16)
+}
+
+#[must_use]
+pub fn count_merkle_digests_in_proof<EF>(
+    proof: &SystemProof<Keccak256Circuit<EF>, F, EF, { KECCAK_DIGEST_ELEMS }>,
+) -> usize
+where
+    EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
+{
+    fn query_batch_decommit_count<EF>(
+        query: &QueryBatchOpening<Val, EF, u64, KECCAK_DIGEST_ELEMS>,
+    ) -> usize
+    where
+        EF: ExtensionField<Val> + TwoAdicField + BasedVectorSpace<Val> + Copy,
+    {
+        match query {
+            QueryBatchOpening::Base { proof, .. } => proof.decommitments.len(),
+            QueryBatchOpening::Extension { proof, .. } => proof.decommitments.len(),
+        }
+    }
+
+    let whir_proof = &proof.whir_proof;
+    // initial commitment
+    let mut total = 1usize;
+    total = total.saturating_add(whir_proof.rounds.len());
+    for round in &whir_proof.rounds {
+        if let Some(query_batch) = round.query_batch.as_ref() {
+            total = total.saturating_add(query_batch_decommit_count(query_batch));
+        }
+    }
+    if let Some(final_query_batch) = whir_proof.final_query_batch.as_ref() {
+        total = total.saturating_add(query_batch_decommit_count(final_query_batch));
+    }
+    total
+}
+
+fn schema_for_version(version: u8) -> &'static str {
+    match version {
+        PROOF_BLOB_VERSION_V1 => JSON_SCHEMA_V1,
+        PROOF_BLOB_VERSION_V2 => JSON_SCHEMA_V2,
+        PROOF_BLOB_VERSION_V3 => JSON_SCHEMA_V3,
+        _ => JSON_SCHEMA,
+    }
+}
+
+fn proof_blob_version(proof_blob: &[u8]) -> u8 {
+    if proof_blob.len() >= 5 && proof_blob[0..4] == PROOF_BLOB_MAGIC {
+        proof_blob[4]
+    } else {
+        PROOF_BLOB_VERSION
+    }
+}
+
 pub fn render_json_payload(proof_blob: &[u8], calldata: &[u8], pretty: bool) -> String {
-    render_json_payload_with_metrics(
+    render_json_payload_with_metrics_and_merkle(
         proof_blob,
         calldata,
         HashCountJson::default(),
         HashCountJson::default(),
+        MerkleJsonMetrics::default(),
         pretty,
     )
 }
@@ -921,10 +1094,31 @@ pub fn render_json_payload_with_metrics(
     hash_counts_verifier: HashCountJson,
     pretty: bool,
 ) -> String {
+    render_json_payload_with_metrics_and_merkle(
+        proof_blob,
+        calldata,
+        hash_counts_prover,
+        hash_counts_verifier,
+        MerkleJsonMetrics::default(),
+        pretty,
+    )
+}
+
+pub fn render_json_payload_with_metrics_and_merkle(
+    proof_blob: &[u8],
+    calldata: &[u8],
+    hash_counts_prover: HashCountJson,
+    hash_counts_verifier: HashCountJson,
+    merkle_metrics: MerkleJsonMetrics,
+    pretty: bool,
+) -> String {
     let selector = verify_bytes_selector();
     let selector_hex = hex_prefixed(&selector);
     let proof_hex = hex_prefixed(proof_blob);
     let calldata_hex = hex_prefixed(calldata);
+    let version = proof_blob_version(proof_blob);
+    let schema = schema_for_version(version);
+    let calldata_gas = estimate_calldata_gas(calldata);
     let hash_counts_total = HashCountJson {
         leaf_hash_calls: hash_counts_prover
             .leaf_hash_calls
@@ -936,15 +1130,20 @@ pub fn render_json_payload_with_metrics(
 
     if pretty {
         format!(
-            "{{\n  \"schema\": \"{}\",\n  \"verify_function\": \"{}\",\n  \"selector\": \"{}\",\n  \"keccak_mode\": \"{}\",\n  \"proof_bytes\": \"{}\",\n  \"proof_bytes_len\": {},\n  \"calldata\": \"{}\",\n  \"calldata_len\": {},\n  \"hash_counts_prover\": {{ \"leaf_hash_calls\": {}, \"node_hash_calls\": {} }},\n  \"hash_counts_verifier\": {{ \"leaf_hash_calls\": {}, \"node_hash_calls\": {} }},\n  \"hash_counts_total\": {{ \"leaf_hash_calls\": {}, \"node_hash_calls\": {} }}\n}}\n",
-            JSON_SCHEMA,
+            "{{\n  \"schema\": \"{}\",\n  \"proof_blob_version\": {},\n  \"verify_function\": \"{}\",\n  \"selector\": \"{}\",\n  \"keccak_mode\": \"{}\",\n  \"masked_digest_bytes\": {},\n  \"masked_digest_bits\": {},\n  \"total_merkle_digest_count\": {},\n  \"proof_bytes\": \"{}\",\n  \"proof_bytes_len\": {},\n  \"calldata\": \"{}\",\n  \"calldata_len\": {},\n  \"calldata_gas_estimate\": {},\n  \"hash_counts_prover\": {{ \"leaf_hash_calls\": {}, \"node_hash_calls\": {} }},\n  \"hash_counts_verifier\": {{ \"leaf_hash_calls\": {}, \"node_hash_calls\": {} }},\n  \"hash_counts_total\": {{ \"leaf_hash_calls\": {}, \"node_hash_calls\": {} }}\n}}\n",
+            schema,
+            version,
             VERIFY_FUNCTION,
             selector_hex,
             keccak_mode_label(),
+            merkle_metrics.masked_digest_bytes,
+            merkle_metrics.masked_digest_bits,
+            merkle_metrics.total_merkle_digest_count,
             proof_hex,
             proof_blob.len(),
             calldata_hex,
             calldata.len(),
+            calldata_gas,
             hash_counts_prover.leaf_hash_calls,
             hash_counts_prover.node_hash_calls,
             hash_counts_verifier.leaf_hash_calls,
@@ -954,15 +1153,20 @@ pub fn render_json_payload_with_metrics(
         )
     } else {
         format!(
-            "{{\"schema\":\"{}\",\"verify_function\":\"{}\",\"selector\":\"{}\",\"keccak_mode\":\"{}\",\"proof_bytes\":\"{}\",\"proof_bytes_len\":{},\"calldata\":\"{}\",\"calldata_len\":{},\"hash_counts_prover\":{{\"leaf_hash_calls\":{},\"node_hash_calls\":{}}},\"hash_counts_verifier\":{{\"leaf_hash_calls\":{},\"node_hash_calls\":{}}},\"hash_counts_total\":{{\"leaf_hash_calls\":{},\"node_hash_calls\":{}}}}}",
-            JSON_SCHEMA,
+            "{{\"schema\":\"{}\",\"proof_blob_version\":{},\"verify_function\":\"{}\",\"selector\":\"{}\",\"keccak_mode\":\"{}\",\"masked_digest_bytes\":{},\"masked_digest_bits\":{},\"total_merkle_digest_count\":{},\"proof_bytes\":\"{}\",\"proof_bytes_len\":{},\"calldata\":\"{}\",\"calldata_len\":{},\"calldata_gas_estimate\":{},\"hash_counts_prover\":{{\"leaf_hash_calls\":{},\"node_hash_calls\":{}}},\"hash_counts_verifier\":{{\"leaf_hash_calls\":{},\"node_hash_calls\":{}}},\"hash_counts_total\":{{\"leaf_hash_calls\":{},\"node_hash_calls\":{}}}}}",
+            schema,
+            version,
             VERIFY_FUNCTION,
             selector_hex,
             keccak_mode_label(),
+            merkle_metrics.masked_digest_bytes,
+            merkle_metrics.masked_digest_bits,
+            merkle_metrics.total_merkle_digest_count,
             proof_hex,
             proof_blob.len(),
             calldata_hex,
             calldata.len(),
+            calldata_gas,
             hash_counts_prover.leaf_hash_calls,
             hash_counts_prover.node_hash_calls,
             hash_counts_verifier.leaf_hash_calls,
@@ -986,11 +1190,15 @@ pub fn hex_prefixed(bytes: &[u8]) -> String {
 
 struct BlobWriter {
     bytes: Vec<u8>,
+    digest_bytes: usize,
 }
 
 impl BlobWriter {
-    fn new() -> Self {
-        Self { bytes: Vec::new() }
+    fn new(digest_bytes: usize) -> Self {
+        Self {
+            bytes: Vec::new(),
+            digest_bytes: clamp_effective_digest_bytes(digest_bytes),
+        }
     }
 
     fn pos(&self) -> usize {
@@ -1039,7 +1247,8 @@ impl BlobWriter {
 
     fn write_digest(&mut self, digest: &[u64; KECCAK_DIGEST_ELEMS]) {
         let bytes32 = digest_u64_to_bytes32(digest);
-        self.bytes.extend_from_slice(&bytes32);
+        self.bytes
+            .extend_from_slice(&bytes32[..self.digest_bytes]);
     }
 
     fn write_option<T, W>(&mut self, value: &Option<T>, mut write_some: W)
@@ -1059,11 +1268,20 @@ impl BlobWriter {
 struct BlobReader<'a> {
     bytes: &'a [u8],
     pos: usize,
+    digest_bytes: usize,
 }
 
 impl<'a> BlobReader<'a> {
     fn new(bytes: &'a [u8]) -> Self {
-        Self { bytes, pos: 0 }
+        Self {
+            bytes,
+            pos: 0,
+            digest_bytes: 32,
+        }
+    }
+
+    fn set_digest_bytes(&mut self, digest_bytes: usize) {
+        self.digest_bytes = clamp_effective_digest_bytes(digest_bytes);
     }
 
     fn is_eof(&self) -> bool {
@@ -1137,7 +1355,13 @@ impl<'a> BlobReader<'a> {
     }
 
     fn read_digest(&mut self) -> Result<[u64; KECCAK_DIGEST_ELEMS], DecodeError> {
-        let bytes32 = self.read_exact::<32>()?;
+        if self.pos + self.digest_bytes > self.bytes.len() {
+            return Err(DecodeError::new("unexpected end of input"));
+        }
+        let mut bytes32 = [0u8; 32];
+        bytes32[..self.digest_bytes]
+            .copy_from_slice(&self.bytes[self.pos..self.pos + self.digest_bytes]);
+        self.pos += self.digest_bytes;
         Ok(digest_bytes32_to_u64(&bytes32))
     }
 

@@ -129,11 +129,11 @@ impl<EF: ExtensionField<crate::circuits::keccak256::F> + TwoAdicField>
     }
 
     fn merkle_hash(&self) -> Self::MerkleHash {
-        KeccakU32BeLeafHasher
+        KeccakU32BeLeafHasher::for_security_bits(self.air_settings.security_bits)
     }
 
     fn merkle_compress(&self) -> Self::MerkleCompress {
-        KeccakNodeCompress
+        KeccakNodeCompress::for_security_bits(self.air_settings.security_bits)
     }
 
     fn new_challenger(&self) -> Self::Challenger {

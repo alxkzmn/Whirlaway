@@ -11,9 +11,13 @@ use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 use whirlaway::circuits::keccak256::{EF, Keccak256Circuit, Keccak256Input};
 use whirlaway::evm_codec;
 use whirlaway::evm_codec::{
-    encode_calldata_verify_bytes, encode_proof_blob_v2, render_json_payload_with_metrics,
+    MerkleJsonMetrics, count_merkle_digests_in_proof, effective_digest_bytes_for_v3_security_bits,
+    encode_calldata_verify_bytes, encode_proof_blob_v3,
+    render_json_payload_with_metrics_and_merkle,
 };
 use whirlaway::proving_system::{KeccakProvingSystemConfig, prepare, prove, verify};
+
+const SECURITY_LEVEL: usize = 128;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -139,7 +143,7 @@ fn run() -> Result<(), String> {
     };
 
     let settings = AirSettings::new(
-        128,
+        SECURITY_LEVEL,
         SecurityAssumption::CapacityBound,
         FoldingFactor::ConstantFromSecondRound(4, 4),
         1,
@@ -170,15 +174,23 @@ fn run() -> Result<(), String> {
         .map_err(|err| format!("generated proof failed verification: {err}"))?;
     let hash_counts_verifier = snapshot_hash_counters();
 
-    let proof_blob = encode_proof_blob_v2(&public_values, &proof);
+    let masked_digest_bytes = effective_digest_bytes_for_v3_security_bits(SECURITY_LEVEL);
+    let masked_digest_bits = masked_digest_bytes.saturating_mul(8);
+    let total_merkle_digest_count = count_merkle_digests_in_proof(&proof);
+    let proof_blob = encode_proof_blob_v3(&public_values, &proof, masked_digest_bytes);
     let calldata = encode_calldata_verify_bytes(&proof_blob);
 
     let output = match cli.format {
-        OutputFormat::Json => render_json_payload_with_metrics(
+        OutputFormat::Json => render_json_payload_with_metrics_and_merkle(
             &proof_blob,
             &calldata,
             hash_counts_prover.into(),
             hash_counts_verifier.into(),
+            MerkleJsonMetrics {
+                masked_digest_bytes,
+                masked_digest_bits,
+                total_merkle_digest_count,
+            },
             cli.pretty,
         ),
         OutputFormat::Calldata => evm_codec::hex_prefixed(&calldata),
