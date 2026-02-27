@@ -16,6 +16,8 @@ pub struct AirSettings {
     pub security_bits: usize,
     #[serde(default)]
     pub merkle_security_bits_override: Option<usize>,
+    #[serde(default)]
+    pub whir_pow_bits: Option<usize>,
     pub whir_soudness_type: SecurityAssumption,
     pub whir_folding_factor: FoldingFactor,
     pub whir_log_inv_rate: usize,
@@ -35,6 +37,7 @@ impl AirSettings {
         Self {
             security_bits,
             merkle_security_bits_override: None,
+            whir_pow_bits: None,
             whir_soudness_type,
             whir_folding_factor,
             whir_log_inv_rate,
@@ -50,6 +53,15 @@ impl AirSettings {
         self.merkle_security_bits_override = override_bits;
         self
     }
+
+    pub const fn with_whir_pow_bits(mut self, pow_bits: Option<usize>) -> Self {
+        self.whir_pow_bits = pow_bits;
+        self
+    }
+
+    pub fn effective_whir_pow_bits(&self) -> usize {
+        self.whir_pow_bits.unwrap_or(WHIR_POW_BITS)
+    }
 }
 
 impl Default for AirSettings {
@@ -57,6 +69,7 @@ impl Default for AirSettings {
         Self {
             security_bits: 128,
             merkle_security_bits_override: None,
+            whir_pow_bits: None,
             whir_soudness_type: SecurityAssumption::CapacityBound,
             whir_folding_factor: FoldingFactor::ConstantFromSecondRound(7, 4),
             whir_log_inv_rate: 1,

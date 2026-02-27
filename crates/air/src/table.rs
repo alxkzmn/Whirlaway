@@ -8,7 +8,7 @@ use whir_p3::{
     parameters::ProtocolParameters, poly::evals::EvaluationsList, whir::parameters::WhirConfig,
 };
 
-use crate::{AirSettings, WHIR_POW_BITS};
+use crate::AirSettings;
 
 pub struct AirTable<F: Field, EF, A> {
     pub log_length: usize,
@@ -82,7 +82,7 @@ where
         let num_variables = self.log_length + self.log_n_witness_columns();
         let whir_params = ProtocolParameters {
             security_level: settings.security_bits,
-            pow_bits: WHIR_POW_BITS,
+            pow_bits: settings.effective_whir_pow_bits(),
             folding_factor: settings.whir_folding_factor,
             merkle_hash,
             merkle_compress,
