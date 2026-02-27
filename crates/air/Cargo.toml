@@ -24,3 +24,4 @@ p3-matrix.workspace = true
 rand.workspace = true
 keccak_air.workspace = true
 air-test-utils.workspace = true
+serde_json = "1.0"
