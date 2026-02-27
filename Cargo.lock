@@ -29,6 +29,7 @@ dependencies = [
  "rand",
  "rayon",
  "serde",
+ "serde_json",
  "sumcheck",
  "tracing",
  "whir-p3",
