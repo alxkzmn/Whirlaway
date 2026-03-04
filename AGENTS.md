@@ -2,6 +2,20 @@
 
 This repository is a Rust workspace implementing a hash-based SNARK. Most “interesting” correctness is in the IOP stack (sumcheck + AIR) and in PCS openings (via `whir-p3`). When writing or modifying tests here, there are several repo-specific gotchas that are easy to rediscover the hard way.
 
+## Mandatory proof-size pre-read
+
+Before starting any work or review that can affect proof size, read:
+
+- `docs/PROOF_SIZE_ANALYSIS.md` (**source of truth** for whirlaway proof-size breakdown and optimization priorities).
+
+This pre-read is mandatory for:
+- AIR width/column changes (witness or preprocessed),
+- WHIR parameter changes,
+- transcript/proof encoding changes (`proof_data`, `whir_proof`, blob/calldata),
+- any claim about proof-size impact.
+
+If another whirlaway proof-size document disagrees, `docs/PROOF_SIZE_ANALYSIS.md` takes precedence unless explicitly superseded.
+
 ## Optimization objective (in order)
 
 - Primary target: **smallest on-chain verifier**:
