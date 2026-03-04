@@ -5,6 +5,8 @@
 extern crate alloc;
 
 mod air;
+mod byte_sponge_air;
+mod byte_sponge_trace;
 mod columns;
 mod constants;
 mod generation;
@@ -13,6 +15,10 @@ mod sponge_air;
 mod sponge_trace;
 
 pub use air::*;
+pub use byte_sponge_air::{ByteSpongeAir, BYTE_EXTRA_COLS};
+pub use byte_sponge_trace::generate_byte_sponge_trace_and_digest_limbs;
+#[cfg(any(test, feature = "test-utils"))]
+pub use byte_sponge_trace::generate_byte_sponge_trace_with_iv;
 pub use columns::*;
 pub use constants::*;
 pub use generation::*;
