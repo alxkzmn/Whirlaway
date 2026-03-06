@@ -124,7 +124,7 @@ where
 
         let proof_params = ProtocolParameters {
             security_level: settings.security_bits,
-            pow_bits: crate::WHIR_POW_BITS,
+            pow_bits: settings.effective_whir_pow_bits(),
             folding_factor: settings.whir_folding_factor,
             merkle_hash: whir_params.merkle_hash.clone(),
             merkle_compress: whir_params.merkle_compress.clone(),

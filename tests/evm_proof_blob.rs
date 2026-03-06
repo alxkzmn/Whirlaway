@@ -72,6 +72,14 @@ fn build_fixture_with_security_and_merkle_override(
     security_bits: usize,
     merkle_security_bits_override: Option<usize>,
 ) -> Fixture {
+    build_fixture_with_overrides(security_bits, merkle_security_bits_override, None)
+}
+
+fn build_fixture_with_overrides(
+    security_bits: usize,
+    merkle_security_bits_override: Option<usize>,
+    whir_pow_bits: Option<usize>,
+) -> Fixture {
     let message_len = message_len_for_log_length(6);
     let mut rng = StdRng::seed_from_u64(0);
     let message: Vec<u8> = (0..message_len).map(|_| rng.random()).collect();
@@ -81,9 +89,10 @@ fn build_fixture_with_security_and_merkle_override(
         expected_digest,
     };
 
-    let config = KeccakProvingSystemConfig::<EF>::new(
-        settings(security_bits).with_merkle_security_bits_override(merkle_security_bits_override),
-    );
+    let settings = settings(security_bits)
+        .with_merkle_security_bits_override(merkle_security_bits_override)
+        .with_whir_pow_bits(whir_pow_bits);
+    let config = KeccakProvingSystemConfig::<EF>::new(settings);
     let prepared = proving_system::prepare(&config, Keccak256Circuit::new(message_len));
     let public_values = Keccak256Circuit::<EF>::public_values(&prepared.circuit, &input);
     let proof = proving_system::prove(&prepared, &input);
@@ -432,4 +441,11 @@ fn merkle_digest_count_includes_final_query_batch() {
 
     let bumped = count_merkle_digests_in_proof(&proof);
     assert_eq!(bumped, baseline + 1);
+}
+
+#[test]
+fn prove_verify_with_whir_pow_bits_override() {
+    let fixture = build_fixture_with_overrides(128, None, Some(20));
+    proving_system::verify(&fixture.prepared, &fixture.proof, &fixture.public_values)
+        .expect("proof with whir_pow_bits override should verify");
 }

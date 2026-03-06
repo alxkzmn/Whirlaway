@@ -16,6 +16,8 @@ pub struct AirSettings {
     pub security_bits: usize,
     #[serde(default)]
     pub merkle_security_bits_override: Option<usize>,
+    #[serde(default)]
+    pub whir_pow_bits: Option<usize>,
     pub whir_soudness_type: SecurityAssumption,
     pub whir_folding_factor: FoldingFactor,
     pub whir_log_inv_rate: usize,
@@ -35,6 +37,7 @@ impl AirSettings {
         Self {
             security_bits,
             merkle_security_bits_override: None,
+            whir_pow_bits: None,
             whir_soudness_type,
             whir_folding_factor,
             whir_log_inv_rate,
@@ -50,6 +53,15 @@ impl AirSettings {
         self.merkle_security_bits_override = override_bits;
         self
     }
+
+    pub const fn with_whir_pow_bits(mut self, pow_bits: Option<usize>) -> Self {
+        self.whir_pow_bits = pow_bits;
+        self
+    }
+
+    pub fn effective_whir_pow_bits(&self) -> usize {
+        self.whir_pow_bits.unwrap_or(WHIR_POW_BITS)
+    }
 }
 
 impl Default for AirSettings {
@@ -57,11 +69,49 @@ impl Default for AirSettings {
         Self {
             security_bits: 128,
             merkle_security_bits_override: None,
+            whir_pow_bits: None,
             whir_soudness_type: SecurityAssumption::CapacityBound,
             whir_folding_factor: FoldingFactor::ConstantFromSecondRound(7, 4),
             whir_log_inv_rate: 1,
             univariate_skips: 4,
             whir_initial_domain_reduction_factor: 5,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::AirSettings;
+    use crate::WHIR_POW_BITS;
+
+    #[test]
+    fn effective_whir_pow_bits_defaults_to_16() {
+        let settings = AirSettings::default();
+        assert_eq!(settings.effective_whir_pow_bits(), WHIR_POW_BITS);
+    }
+
+    #[test]
+    fn effective_whir_pow_bits_uses_override() {
+        let settings = AirSettings::default().with_whir_pow_bits(Some(30));
+        assert_eq!(settings.effective_whir_pow_bits(), 30);
+    }
+
+    #[test]
+    fn serde_backward_compat_missing_whir_pow_bits_defaults_to_none() {
+        let legacy_value = json!({
+            "security_bits": 128,
+            "whir_soudness_type": "CapacityBound",
+            "whir_folding_factor": {"ConstantFromSecondRound": [4, 4]},
+            "whir_log_inv_rate": 6,
+            "univariate_skips": 1,
+            "whir_initial_domain_reduction_factor": 4
+        });
+
+        let settings: AirSettings =
+            serde_json::from_value(legacy_value).expect("legacy JSON should deserialize");
+        assert_eq!(settings.whir_pow_bits, None);
+        assert_eq!(settings.effective_whir_pow_bits(), WHIR_POW_BITS);
     }
 }
