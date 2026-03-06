@@ -83,6 +83,10 @@ name = "keccak_public_values"
 path = "../tests/keccak_public_values.rs"
 
 [[test]]
+name = "keccak_rewrite_mode"
+path = "../tests/keccak_rewrite_mode.rs"
+
+[[test]]
 name = "proof_serde"
 path = "../tests/proof_serde.rs"
 
