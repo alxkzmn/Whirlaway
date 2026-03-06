@@ -14,6 +14,8 @@ use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AirSettings {
     pub security_bits: usize,
+    #[serde(default)]
+    pub merkle_security_bits_override: Option<usize>,
     pub whir_soudness_type: SecurityAssumption,
     pub whir_folding_factor: FoldingFactor,
     pub whir_log_inv_rate: usize,
@@ -32,6 +34,7 @@ impl AirSettings {
     ) -> Self {
         Self {
             security_bits,
+            merkle_security_bits_override: None,
             whir_soudness_type,
             whir_folding_factor,
             whir_log_inv_rate,
@@ -39,12 +42,21 @@ impl AirSettings {
             whir_initial_domain_reduction_factor,
         }
     }
+
+    pub const fn with_merkle_security_bits_override(
+        mut self,
+        override_bits: Option<usize>,
+    ) -> Self {
+        self.merkle_security_bits_override = override_bits;
+        self
+    }
 }
 
 impl Default for AirSettings {
     fn default() -> Self {
         Self {
             security_bits: 128,
+            merkle_security_bits_override: None,
             whir_soudness_type: SecurityAssumption::CapacityBound,
             whir_folding_factor: FoldingFactor::ConstantFromSecondRound(7, 4),
             whir_log_inv_rate: 1,

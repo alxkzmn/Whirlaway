@@ -6,13 +6,20 @@ use keccak_air::{NUM_ROUNDS, RATE_BYTES};
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use sha3::Digest;
+use whir_p3::metrics::{reset_hash_counters, snapshot_hash_counters};
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 use whirlaway::circuits::keccak256::{EF, Keccak256Circuit, Keccak256Input};
 use whirlaway::evm_codec;
 use whirlaway::evm_codec::{
-    encode_calldata_verify_bytes, encode_proof_blob_v1, render_json_payload,
+    MerkleJsonMetrics, count_merkle_digests_in_proof, encode_calldata_verify_bytes,
+    encode_proof_blob_v3, render_json_payload_with_metrics_and_merkle,
+};
+use whirlaway::hashers::{
+    effective_digest_bytes_for_security_bits, resolve_effective_merkle_security_bits,
 };
 use whirlaway::proving_system::{KeccakProvingSystemConfig, prepare, prove, verify};
+
+const SECURITY_LEVEL: usize = 128;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -25,6 +32,7 @@ struct CliArgs {
     out: Option<PathBuf>,
     pretty: bool,
     log_b: usize,
+    merkle_security_bits_override: Option<usize>,
 }
 
 impl CliArgs {
@@ -33,6 +41,7 @@ impl CliArgs {
         let mut out = None;
         let mut pretty = false;
         let mut log_b = 7usize;
+        let mut merkle_security_bits_override = None;
 
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
@@ -72,6 +81,18 @@ impl CliArgs {
                         return Err("--log-b must be > 0".to_string());
                     }
                 }
+                "--merkle-security-bits" => {
+                    let Some(value) = args.next() else {
+                        return Err(format!(
+                            "missing value for --merkle-security-bits\n{}",
+                            Self::usage()
+                        ));
+                    };
+                    let parsed = value.parse::<usize>().map_err(|err| {
+                        format!("invalid --merkle-security-bits value '{value}': {err}")
+                    })?;
+                    merkle_security_bits_override = Some(parsed);
+                }
                 "-h" | "--help" => {
                     return Err(Self::usage().to_string());
                 }
@@ -86,6 +107,7 @@ impl CliArgs {
             out,
             pretty,
             log_b,
+            merkle_security_bits_override,
         })
     }
 
@@ -97,6 +119,7 @@ impl CliArgs {
             "  --out <path>               Write output to file (default: stdout)\n",
             "  --pretty                   Pretty-print JSON output\n",
             "  --log-b <usize>            Target log2(trace rows) (default: 7)\n",
+            "  --merkle-security-bits <usize>  Override Merkle masking security bits\n",
             "  -h, --help                 Show this help\n",
         )
     }
@@ -137,14 +160,27 @@ fn run() -> Result<(), String> {
         }
     };
 
+    let merkle_security_bits =
+        resolve_effective_merkle_security_bits(SECURITY_LEVEL, cli.merkle_security_bits_override);
+    let merkle_override_weaker_than_security = cli
+        .merkle_security_bits_override
+        .is_some_and(|override_bits| override_bits < SECURITY_LEVEL);
+    if merkle_override_weaker_than_security {
+        eprintln!(
+            "warning: merkle security override ({}) is below protocol security bits ({})",
+            merkle_security_bits, SECURITY_LEVEL
+        );
+    }
+
     let settings = AirSettings::new(
-        128,
+        SECURITY_LEVEL,
         SecurityAssumption::CapacityBound,
         FoldingFactor::ConstantFromSecondRound(4, 4),
         1,
         1,
         4,
-    );
+    )
+    .with_merkle_security_bits_override(cli.merkle_security_bits_override);
 
     let (message_len, _actual_log_b) = message_len_for_log_length(cli.log_b);
     let proving_settings = KeccakProvingSystemConfig::<EF>::new(settings);
@@ -161,15 +197,36 @@ fn run() -> Result<(), String> {
     };
 
     let public_values = Keccak256Circuit::<EF>::public_values(&prepared.circuit, &input);
+    reset_hash_counters();
     let proof = prove(&prepared, &input);
+    let hash_counts_prover = snapshot_hash_counters();
+    reset_hash_counters();
     verify(&prepared, &proof, &public_values)
         .map_err(|err| format!("generated proof failed verification: {err}"))?;
+    let hash_counts_verifier = snapshot_hash_counters();
 
-    let proof_blob = encode_proof_blob_v1(&public_values, &proof);
+    let masked_digest_bytes = effective_digest_bytes_for_security_bits(merkle_security_bits);
+    let masked_digest_bits = masked_digest_bytes.saturating_mul(8);
+    let total_merkle_digest_count = count_merkle_digests_in_proof(&proof);
+    let proof_blob = encode_proof_blob_v3(&public_values, &proof, masked_digest_bytes);
     let calldata = encode_calldata_verify_bytes(&proof_blob);
 
     let output = match cli.format {
-        OutputFormat::Json => render_json_payload(&proof_blob, &calldata, cli.pretty),
+        OutputFormat::Json => render_json_payload_with_metrics_and_merkle(
+            &proof_blob,
+            &calldata,
+            hash_counts_prover.into(),
+            hash_counts_verifier.into(),
+            MerkleJsonMetrics {
+                masked_digest_bytes,
+                masked_digest_bits,
+                total_merkle_digest_count,
+                merkle_security_bits,
+                merkle_security_bits_override: cli.merkle_security_bits_override,
+                merkle_override_weaker_than_security,
+            },
+            cli.pretty,
+        ),
         OutputFormat::Calldata => evm_codec::hex_prefixed(&calldata),
     };
 
