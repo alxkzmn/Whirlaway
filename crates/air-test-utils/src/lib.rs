@@ -6,7 +6,7 @@ use p3_field::{PrimeCharacteristicRing, extension::BinomialExtensionField};
 use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
 use p3_matrix::Matrix;
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use rand::{Rng, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng, rngs::StdRng};
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 use whir_p3::poly::evals::EvaluationsList;
 

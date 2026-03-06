@@ -8,9 +8,8 @@
 use air::AirSettings;
 use keccak_air::generate_sponge_trace_with_iv;
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
-use whirlaway::circuits::keccak256::{Keccak256Circuit, Keccak256Input};
-use whirlaway::hashers::KECCAK_DIGEST_ELEMS;
-use whirlaway::proving_system::{Circuit, KeccakProvingSystemConfig, prepare, prove, verify};
+use whirlaway::circuits::keccak256::{EF, Keccak256Circuit, Keccak256Input};
+use whirlaway::proving_system::{KeccakProvingSystemConfig, prepare, prove, verify};
 
 /// Convert u16 limbs (little-endian) back into a [u8; 32] digest.
 fn limbs_to_digest(limbs: &[u16; 16]) -> [u8; 32] {
@@ -40,10 +39,9 @@ fn sponge_nonzero_iv_rejected() {
         generate_sponge_trace_with_iv::<whirlaway::circuits::keccak256::F>(&message, bad_iv);
 
     // Also generate the correct digest for comparison.
-    let (_good_trace, good_digest_limbs) =
-        keccak_air::generate_sponge_trace_and_digest_limbs::<whirlaway::circuits::keccak256::F>(
-            &message,
-        );
+    let (_good_trace, good_digest_limbs) = keccak_air::generate_sponge_trace_and_digest_limbs::<
+        whirlaway::circuits::keccak256::F,
+    >(&message);
 
     // Sanity: the two digests must differ (non-zero IV ⇒ different output).
     assert_ne!(
@@ -56,9 +54,7 @@ fn sponge_nonzero_iv_rejected() {
     // so we use the CORRECT message but the WRONG digest. The internal trace
     // generation uses IV=0 (correct), so the resulting output limbs won't match
     // the corrupted digest we supply as public values.
-    let circuit = Keccak256Circuit {
-        input_size: message.len(),
-    };
+    let circuit = Keccak256Circuit::new(message.len());
     let settings = AirSettings::new(
         64,
         SecurityAssumption::CapacityBound,
@@ -67,11 +63,9 @@ fn sponge_nonzero_iv_rejected() {
         1,
         4,
     );
-    let config = KeccakProvingSystemConfig {
-        air_settings: settings,
-    };
+    let config = KeccakProvingSystemConfig::<EF>::new(settings);
 
-    let prepared = prepare::<Keccak256Circuit, _, KECCAK_DIGEST_ELEMS>(&config, circuit);
+    let prepared = prepare(&config, circuit);
 
     // Feed the correct message but the corrupted digest (from bad IV).
     let corrupted_digest = limbs_to_digest(&corrupted_digest_limbs);
@@ -79,7 +73,7 @@ fn sponge_nonzero_iv_rejected() {
         message: message.clone(),
         expected_digest: corrupted_digest,
     };
-    let public_values = Keccak256Circuit::public_values(&prepared.circuit, &input);
+    let public_values = Keccak256Circuit::<EF>::public_values(&prepared.circuit, &input);
 
     // The prover builds its witness using the standard sponge (IV=0), but the
     // public values claim a different digest (from IV≠0). The digest check

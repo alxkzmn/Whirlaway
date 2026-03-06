@@ -10,7 +10,9 @@ use whir_p3::{
     poly::multilinear::MultilinearPoint,
     whir::{
         committer::reader::CommitmentReader, committer::writer::CommitmentWriter,
-        constraints::statement::EqStatement, parameters::WhirConfig, proof::WhirProof,
+        constraints::statement::EqStatement,
+        parameters::{SumcheckStrategy, WhirConfig},
+        proof::WhirProof,
         prover::Prover, verifier::Verifier,
     },
 };
@@ -52,16 +54,17 @@ fn test_pcs_commitment_creation() {
 
     let committer = CommitmentWriter::new(&whir_params);
     let packed_pol = packed_multilinear(&witness);
+    let mut statement = whir_params.initial_statement(packed_pol, SumcheckStrategy::Classic);
 
     let dft = Radix2Bowers;
 
     let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
-    let _commitment = committer
+    committer
         .commit::<_, PF, F, PF, 8>(
             &dft,
             &mut whir_proof,
             prover_state.challenger_mut(),
-            packed_pol,
+            &mut statement,
         )
         .unwrap();
 
@@ -99,6 +102,7 @@ fn test_pcs_commitment_parsing() {
 
     let committer = CommitmentWriter::new(&whir_params);
     let packed_pol = packed_multilinear(&witness);
+    let mut statement = whir_params.initial_statement(packed_pol, SumcheckStrategy::Classic);
 
     let dft = Radix2Bowers;
 
@@ -108,7 +112,7 @@ fn test_pcs_commitment_parsing() {
             &dft,
             &mut whir_proof,
             prover_state.challenger_mut(),
-            packed_pol,
+            &mut statement,
         )
         .unwrap();
 
@@ -154,38 +158,36 @@ fn test_pcs_opening_proof() {
     let packed_pol = packed_multilinear(&witness);
 
     let dft = Radix2Bowers;
-
-    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
-    let packed_witness = committer
-        .commit::<_, PF, F, PF, 8>(
-            &dft,
-            &mut whir_proof,
-            prover_state.challenger_mut(),
-            packed_pol,
-        )
-        .unwrap();
-
-    // Create opening proof for an actual evaluation of the committed packed witness.
-    let prover = Prover(&whir_params);
     let num_vars = table.log_n_witness_columns() + log_length;
     let point: Vec<EF> = (0..num_vars)
         .map(|i| if i % 2 == 0 { EF::ZERO } else { EF::ONE })
         .collect();
     let point = MultilinearPoint::new(point);
-    let value = packed_witness
-        .polynomial
-        .evaluate_hypercube_base::<EF>(&point);
 
-    let mut statement = EqStatement::<EF>::initialize(num_vars);
-    statement.add_evaluated_constraint(point, value);
+    let mut initial_statement =
+        whir_params.initial_statement(packed_pol, SumcheckStrategy::Classic);
+    let _value = initial_statement.evaluate(&point);
+    let verifier_statement = initial_statement.normalize();
 
+    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
+    let prover_data = committer
+        .commit::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            &mut initial_statement,
+        )
+        .unwrap();
+
+    // Create opening proof.
+    let prover = Prover(&whir_params);
     prover
         .prove::<_, PF, F, PF, 8>(
             &dft,
             &mut whir_proof,
             prover_state.challenger_mut(),
-            statement.clone(),
-            packed_witness,
+            &initial_statement,
+            prover_data,
         )
         .unwrap();
 
@@ -201,7 +203,7 @@ fn test_pcs_opening_proof() {
             &whir_proof,
             verifier_state.challenger_mut(),
             &parsed_commitment,
-            statement,
+            verifier_statement,
         )
         .unwrap();
 }
@@ -233,39 +235,36 @@ fn test_pcs_invalid_opening() {
     let packed_pol = packed_multilinear(&witness);
 
     let dft = Radix2Bowers;
-
-    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
-    let packed_witness = committer
-        .commit::<_, PF, F, PF, 8>(
-            &dft,
-            &mut whir_proof,
-            prover_state.challenger_mut(),
-            packed_pol,
-        )
-        .unwrap();
-
-    // Prove a correct opening...
-    let prover = Prover(&whir_params);
     let num_vars = table.log_n_witness_columns() + log_length;
     let point = MultilinearPoint::new(
         (0..num_vars)
             .map(|i| if i % 2 == 0 { EF::ONE } else { EF::ZERO })
             .collect(),
     );
-    let correct_value = packed_witness
-        .polynomial
-        .evaluate_hypercube_base::<EF>(&point);
 
-    let mut statement = EqStatement::<EF>::initialize(num_vars);
-    statement.add_evaluated_constraint(point.clone(), correct_value);
+    let mut initial_statement =
+        whir_params.initial_statement(packed_pol, SumcheckStrategy::Classic);
+    let correct_value = initial_statement.evaluate(&point);
 
+    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
+    let prover_data = committer
+        .commit::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            &mut initial_statement,
+        )
+        .unwrap();
+
+    // Prove a correct opening...
+    let prover = Prover(&whir_params);
     prover
         .prove::<_, PF, F, PF, 8>(
             &dft,
             &mut whir_proof,
             prover_state.challenger_mut(),
-            statement,
-            packed_witness,
+            &initial_statement,
+            prover_data,
         )
         .unwrap();
 
@@ -319,19 +318,6 @@ fn test_pcs_multiple_evaluations() {
     let packed_pol = packed_multilinear(&witness);
 
     let dft = Radix2Bowers;
-
-    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
-    let packed_witness = committer
-        .commit::<_, PF, F, PF, 8>(
-            &dft,
-            &mut whir_proof,
-            prover_state.challenger_mut(),
-            packed_pol,
-        )
-        .unwrap();
-
-    // Create statement with multiple constraints, using correct evaluations.
-    let prover = Prover(&whir_params);
     let num_vars = table.log_n_witness_columns() + log_length;
     let point1 = MultilinearPoint::new(
         (0..num_vars)
@@ -343,24 +329,31 @@ fn test_pcs_multiple_evaluations() {
             .map(|i| if i % 3 == 0 { EF::ONE } else { EF::ZERO })
             .collect(),
     );
-    let value1 = packed_witness
-        .polynomial
-        .evaluate_hypercube_base::<EF>(&point1);
-    let value2 = packed_witness
-        .polynomial
-        .evaluate_hypercube_base::<EF>(&point2);
+    let mut initial_statement =
+        whir_params.initial_statement(packed_pol, SumcheckStrategy::Classic);
+    let _ = initial_statement.evaluate(&point1);
+    let _ = initial_statement.evaluate(&point2);
+    let verifier_statement = initial_statement.normalize();
 
-    let mut statement = EqStatement::<EF>::initialize(num_vars);
-    statement.add_evaluated_constraint(point1, value1);
-    statement.add_evaluated_constraint(point2, value2);
+    let mut whir_proof = WhirProof::<F, EF, F, 8>::default();
+    let prover_data = committer
+        .commit::<_, PF, F, PF, 8>(
+            &dft,
+            &mut whir_proof,
+            prover_state.challenger_mut(),
+            &mut initial_statement,
+        )
+        .unwrap();
 
+    // Prove multiple opening constraints.
+    let prover = Prover(&whir_params);
     prover
         .prove::<_, PF, F, PF, 8>(
             &dft,
             &mut whir_proof,
             prover_state.challenger_mut(),
-            statement.clone(),
-            packed_witness,
+            &initial_statement,
+            prover_data,
         )
         .unwrap();
 
@@ -375,7 +368,7 @@ fn test_pcs_multiple_evaluations() {
             &whir_proof,
             verifier_state.challenger_mut(),
             &parsed_commitment,
-            statement,
+            verifier_statement,
         )
         .unwrap();
 }
@@ -405,6 +398,7 @@ fn test_pcs_different_polynomial_sizes() {
 
         let committer = CommitmentWriter::new(&whir_params);
         let packed_pol = packed_multilinear(&witness);
+        let mut statement = whir_params.initial_statement(packed_pol, SumcheckStrategy::Classic);
 
         let dft = Radix2Bowers;
 
@@ -413,7 +407,7 @@ fn test_pcs_different_polynomial_sizes() {
             &dft,
             &mut whir_proof,
             prover_state.challenger_mut(),
-            packed_pol,
+            &mut statement,
         );
 
         // Should work for different sizes

@@ -1,9 +1,9 @@
 use p3_field::PrimeCharacteristicRing;
-use whirlaway::circuits::keccak256::{EF, Keccak256Circuit};
+use whirlaway::circuits::keccak256::{EF, F, Keccak256Circuit};
 use whirlaway::hashers::KECCAK_DIGEST_ELEMS;
 use whirlaway::proving_system::{self, Proof};
 
-type KeccakProof = Proof<Keccak256Circuit, { KECCAK_DIGEST_ELEMS }>;
+type KeccakProof = Proof<Keccak256Circuit, F, EF, { KECCAK_DIGEST_ELEMS }>;
 
 #[test]
 fn proof_bincode_roundtrip_synthetic() {

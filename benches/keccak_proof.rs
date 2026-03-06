@@ -5,7 +5,7 @@ use rand::{RngExt, SeedableRng, rngs::StdRng};
 use whir_p3::{parameters::FoldingFactor, parameters::errors::SecurityAssumption};
 
 use whirlaway::circuits::keccak_air::{
-    Challenger as MyChallenger, KeccakAirCircuit, MerkleCompress, MerkleHash,
+    Challenger as MyChallenger, EF, F, KeccakAirCircuit, MerkleCompress, MerkleHash,
 };
 use whirlaway::hashers::KECCAK_DIGEST_ELEMS;
 use whirlaway::proving_system::{ProvingSystemConfig, prepare, prove, verify};
@@ -38,7 +38,10 @@ fn bench(c: &mut Criterion) {
             |b, log_n_rows| {
                 let n_rows = 1 << log_n_rows;
                 let keccak_air_circuit = KeccakAirCircuit { n_inputs: n_rows };
-                let prepared = prepare(&proving_settings, keccak_air_circuit);
+                let prepared = prepare::<KeccakAirCircuit, _, F, EF, KECCAK_DIGEST_ELEMS>(
+                    &proving_settings,
+                    keccak_air_circuit,
+                );
 
                 b.iter(|| {
                     // The witness generation is included because ProveKit doesn't separate witness generation and proving.
@@ -57,7 +60,7 @@ fn bench(c: &mut Criterion) {
     group.bench_function("verify", |b| {
         let n_rows = 1 << log_length;
         let keccak_air_circuit = KeccakAirCircuit { n_inputs: n_rows };
-        let prepared = prepare::<KeccakAirCircuit, _, KECCAK_DIGEST_ELEMS>(
+        let prepared = prepare::<KeccakAirCircuit, _, F, EF, KECCAK_DIGEST_ELEMS>(
             &proving_settings,
             keccak_air_circuit,
         );

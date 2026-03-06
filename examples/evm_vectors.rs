@@ -7,13 +7,12 @@ use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use sha3::Digest;
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
-use whirlaway::circuits::keccak256::{Keccak256Circuit, Keccak256Input};
+use whirlaway::circuits::keccak256::{EF, Keccak256Circuit, Keccak256Input};
 use whirlaway::evm_codec;
 use whirlaway::evm_codec::{
     encode_calldata_verify_bytes, encode_proof_blob_v1, render_json_payload,
 };
-use whirlaway::hashers::KECCAK_DIGEST_ELEMS;
-use whirlaway::proving_system::{Circuit, KeccakProvingSystemConfig, prepare, prove, verify};
+use whirlaway::proving_system::{KeccakProvingSystemConfig, prepare, prove, verify};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -148,24 +147,20 @@ fn run() -> Result<(), String> {
     );
 
     let (message_len, _actual_log_b) = message_len_for_log_length(cli.log_b);
-    let proving_settings = KeccakProvingSystemConfig {
-        air_settings: settings,
-    };
+    let proving_settings = KeccakProvingSystemConfig::<EF>::new(settings);
 
     let mut rng = StdRng::seed_from_u64(0);
     let message: Vec<u8> = (0..message_len).map(|_| rng.random()).collect();
     let expected_digest: [u8; 32] = sha3::Keccak256::digest(&message).into();
 
-    let circuit = Keccak256Circuit {
-        input_size: message_len,
-    };
-    let prepared = prepare::<Keccak256Circuit, _, KECCAK_DIGEST_ELEMS>(&proving_settings, circuit);
+    let circuit = Keccak256Circuit::new(message_len);
+    let prepared = prepare(&proving_settings, circuit);
     let input = Keccak256Input {
         message,
         expected_digest,
     };
 
-    let public_values = Keccak256Circuit::public_values(&prepared.circuit, &input);
+    let public_values = Keccak256Circuit::<EF>::public_values(&prepared.circuit, &input);
     let proof = prove(&prepared, &input);
     verify(&prepared, &proof, &public_values)
         .map_err(|err| format!("generated proof failed verification: {err}"))?;

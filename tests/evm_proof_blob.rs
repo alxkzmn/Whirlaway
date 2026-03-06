@@ -3,13 +3,13 @@ use p3_field::PrimeCharacteristicRing;
 use rand::rngs::StdRng;
 use rand::{RngExt, SeedableRng};
 use sha3::Digest;
-use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
+use whir_p3::parameters::{errors::SecurityAssumption, FoldingFactor};
 use whir_p3::poly::evals::EvaluationsList;
 use whir_p3::whir::proof::SumcheckData;
-use whirlaway::circuits::keccak256::{EF, F, Keccak256Circuit, Keccak256Input};
+use whirlaway::circuits::keccak256::{Keccak256Circuit, Keccak256Input, EF, F};
 use whirlaway::evm_codec;
 use whirlaway::hashers::KECCAK_DIGEST_ELEMS;
-use whirlaway::proving_system::{self, Circuit, KeccakProvingSystemConfig, Prepared};
+use whirlaway::proving_system::{self, KeccakProvingSystemConfig, Prepared};
 
 use evm_codec::{
     decode_proof_blob_v1, decode_verify_bytes_calldata, encode_calldata_verify_bytes,
@@ -18,8 +18,8 @@ use evm_codec::{
 };
 
 type PreparedKeccak =
-    Prepared<Keccak256Circuit, KeccakProvingSystemConfig, { KECCAK_DIGEST_ELEMS }>;
-type KeccakProof = proving_system::Proof<Keccak256Circuit, { KECCAK_DIGEST_ELEMS }>;
+    Prepared<Keccak256Circuit<EF>, KeccakProvingSystemConfig<EF>, F, EF, { KECCAK_DIGEST_ELEMS }>;
+type KeccakProof = proving_system::Proof<Keccak256Circuit<EF>, F, EF, { KECCAK_DIGEST_ELEMS }>;
 
 struct Fixture {
     prepared: PreparedKeccak,
@@ -69,16 +69,9 @@ fn build_fixture() -> Fixture {
         expected_digest,
     };
 
-    let config = KeccakProvingSystemConfig {
-        air_settings: settings(),
-    };
-    let prepared = proving_system::prepare::<Keccak256Circuit, _, { KECCAK_DIGEST_ELEMS }>(
-        &config,
-        Keccak256Circuit {
-            input_size: message_len,
-        },
-    );
-    let public_values = Keccak256Circuit::public_values(&prepared.circuit, &input);
+    let config = KeccakProvingSystemConfig::<EF>::new(settings());
+    let prepared = proving_system::prepare(&config, Keccak256Circuit::new(message_len));
+    let public_values = Keccak256Circuit::<EF>::public_values(&prepared.circuit, &input);
     let proof = proving_system::prove(&prepared, &input);
     proving_system::verify(&prepared, &proof, &public_values).unwrap();
 
@@ -144,7 +137,7 @@ fn calldata_and_json_mode_contract() {
     );
 
     let json = render_json_payload(&blob, &calldata, false);
-    assert!(json.contains("\"schema\":\"p3-whirlaway-evm-proof-v1\""));
+    assert!(json.contains("\"schema\":\"p3-whirlaway-evm-proof-v2\""));
     assert!(json.contains("\"verify_function\":\"verify(bytes)\""));
     assert!(json.contains(&format!("\"proof_bytes_len\":{}", blob.len())));
     assert!(json.contains(&format!("\"calldata_len\":{}", calldata.len())));
@@ -210,13 +203,11 @@ fn option_roundtrip_stability_for_present_and_absent_sections() {
     let with_options_decoded =
         decode_proof_blob_v1(&with_options_blob).expect("decode with options failed");
     assert!(with_options_decoded.proof.whir_proof.final_poly.is_some());
-    assert!(
-        with_options_decoded
-            .proof
-            .whir_proof
-            .final_sumcheck
-            .is_some()
-    );
+    assert!(with_options_decoded
+        .proof
+        .whir_proof
+        .final_sumcheck
+        .is_some());
     let with_options_reencoded = encode_proof_blob_v1(
         &with_options_decoded.public_values,
         &with_options_decoded.proof,
@@ -229,20 +220,16 @@ fn option_roundtrip_stability_for_present_and_absent_sections() {
     let without_options_blob = encode_proof_blob_v1(&fixture.public_values, &without_options);
     let without_options_decoded =
         decode_proof_blob_v1(&without_options_blob).expect("decode without options failed");
-    assert!(
-        without_options_decoded
-            .proof
-            .whir_proof
-            .final_poly
-            .is_none()
-    );
-    assert!(
-        without_options_decoded
-            .proof
-            .whir_proof
-            .final_sumcheck
-            .is_none()
-    );
+    assert!(without_options_decoded
+        .proof
+        .whir_proof
+        .final_poly
+        .is_none());
+    assert!(without_options_decoded
+        .proof
+        .whir_proof
+        .final_sumcheck
+        .is_none());
     let without_options_reencoded = encode_proof_blob_v1(
         &without_options_decoded.public_values,
         &without_options_decoded.proof,

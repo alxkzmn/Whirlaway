@@ -2,16 +2,13 @@ use air::AirSettings;
 use p3_field::PrimeCharacteristicRing;
 use sha3::Digest;
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
-use whirlaway::circuits::keccak256::{F, Keccak256Circuit, Keccak256Input};
-use whirlaway::hashers::KECCAK_DIGEST_ELEMS;
-use whirlaway::proving_system::{Circuit, KeccakProvingSystemConfig, prepare, prove, verify};
+use whirlaway::circuits::keccak256::{EF, F, Keccak256Circuit, Keccak256Input};
+use whirlaway::proving_system::{KeccakProvingSystemConfig, prepare, prove, verify};
 
 #[test]
 fn test_keccak_public_values_binding() {
     let message = b"keccak public input".to_vec();
-    let circuit = Keccak256Circuit {
-        input_size: message.len(),
-    };
+    let circuit = Keccak256Circuit::new(message.len());
     let settings = AirSettings::new(
         64,
         SecurityAssumption::CapacityBound,
@@ -20,17 +17,15 @@ fn test_keccak_public_values_binding() {
         1,
         4,
     );
-    let config = KeccakProvingSystemConfig {
-        air_settings: settings,
-    };
+    let config = KeccakProvingSystemConfig::<EF>::new(settings);
 
-    let prepared = prepare::<Keccak256Circuit, _, KECCAK_DIGEST_ELEMS>(&config, circuit);
+    let prepared = prepare(&config, circuit);
     let expected_digest: [u8; 32] = sha3::Keccak256::digest(&message).into();
     let input = Keccak256Input {
         message: message.clone(),
         expected_digest,
     };
-    let public_values = Keccak256Circuit::public_values(&prepared.circuit, &input);
+    let public_values = Keccak256Circuit::<EF>::public_values(&prepared.circuit, &input);
     let proof = prove(&prepared, &input);
 
     verify(&prepared, &proof, &public_values).unwrap();
