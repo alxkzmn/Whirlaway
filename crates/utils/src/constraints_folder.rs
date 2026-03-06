@@ -56,7 +56,11 @@ where
     }
 
     #[inline]
-    fn assert_zeros<const N: usize, I: Into<Self::Expr>>(&mut self, _: [I; N]) {
-        unreachable!()
+    fn assert_zeros<const N: usize, I: Into<Self::Expr>>(&mut self, array: [I; N]) {
+        array.into_iter().enumerate().for_each(|(i, item)| {
+            let alpha_power = self.alpha_powers[self.constraint_index + i];
+            self.accumulator += alpha_power * item.into();
+        });
+        self.constraint_index += N;
     }
 }

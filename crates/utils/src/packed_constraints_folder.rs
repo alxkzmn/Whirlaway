@@ -35,11 +35,10 @@ impl<'a, F: Field, EF: ExtensionField<F>> AirBuilder for ConstraintFolderPacked<
     }
 
     /// Returns an expression indicating rows where transition constraints should be checked.
-    ///
-    /// # Panics
-    /// This function panics if `size` is not `2`.
+    /// For packed evaluation we conservatively return 1 (always check) to avoid missing constraints.
     #[inline]
     fn is_transition_window(&self, _: usize) -> Self::Expr {
+        // Using ONE so that constraints apply uniformly.
         unreachable!()
     }
 

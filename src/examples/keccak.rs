@@ -3,9 +3,9 @@ use air::table::AirTable;
 use p3_challenger::DuplexChallenger;
 use p3_field::PrimeField64;
 use p3_field::extension::BinomialExtensionField;
-use p3_koala_bear::{GenericPoseidon2LinearLayersKoalaBear, KoalaBear, Poseidon2KoalaBear};
+use p3_keccak_air::{KeccakAir, generate_trace_rows};
+use p3_koala_bear::{KoalaBear, Poseidon2KoalaBear};
 use p3_matrix::Matrix;
-use p3_poseidon2_air::{Poseidon2Air, RoundConstants, generate_trace_rows};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use rand::{Rng, SeedableRng, rngs::StdRng};
 use std::fmt;
@@ -29,11 +29,6 @@ type MyChallenger = DuplexChallenger<F, Poseidon16, 16, 8>;
 // Koalabear
 type F = KoalaBear;
 type EF = BinomialExtensionField<F, 8>;
-type LinearLayers = GenericPoseidon2LinearLayersKoalaBear;
-const SBOX_DEGREE: u64 = 5;
-const SBOX_REGISTERS: usize = 0;
-const HALF_FULL_ROUNDS: usize = 4;
-const PARTIAL_ROUNDS: usize = 20;
 
 // BabyBear
 // type F = BabyBear;
@@ -44,10 +39,8 @@ const PARTIAL_ROUNDS: usize = 20;
 // const HALF_FULL_ROUNDS: usize = 4;
 // const PARTIAL_ROUNDS: usize = 13;
 
-const WIDTH: usize = 16;
-
 #[derive(Clone, Debug)]
-pub struct Poseidon2Benchmark {
+pub struct KeccakBenchmark {
     pub log_n_rows: usize,
     pub settings: AirSettings,
     pub prover_time: Duration,
@@ -55,7 +48,7 @@ pub struct Poseidon2Benchmark {
     pub proof_size: f64, // in bytes
 }
 
-impl fmt::Display for Poseidon2Benchmark {
+impl fmt::Display for KeccakBenchmark {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(
             f,
@@ -82,12 +75,12 @@ impl fmt::Display for Poseidon2Benchmark {
     }
 }
 
-pub fn prove_poseidon2(
-    log_n_rows: usize,
+pub fn prove_keccak(
+    log_length: usize,
     settings: AirSettings,
     n_preprocessed_columns: usize,
     display_logs: bool,
-) -> Poseidon2Benchmark {
+) -> KeccakBenchmark {
     if display_logs {
         let env_filter = EnvFilter::builder()
             .with_default_directive(LevelFilter::INFO.into())
@@ -99,47 +92,35 @@ pub fn prove_poseidon2(
             .init();
     }
 
-    let n_rows = 1 << log_n_rows;
-
     let mut rng = StdRng::seed_from_u64(0);
-    let constants =
-        RoundConstants::<F, WIDTH, HALF_FULL_ROUNDS, PARTIAL_ROUNDS>::from_rng(&mut rng);
 
-    let poseidon_air = Poseidon2Air::<
-        F,
-        LinearLayers,
-        WIDTH,
-        SBOX_DEGREE,
-        SBOX_REGISTERS,
-        HALF_FULL_ROUNDS,
-        PARTIAL_ROUNDS,
-    >::new(constants.clone());
+    let keccak_air = KeccakAir {};
 
-    let inputs: Vec<[F; WIDTH]> = (0..n_rows)
+    let n_rows = 1 << log_length;
+
+    let inputs: Vec<[u64; 25]> = (0..n_rows)
         .map(|_| std::array::from_fn(|_| rng.random()))
         .collect();
 
-    let witness_matrix = generate_trace_rows::<
-        F,
-        LinearLayers,
-        WIDTH,
-        SBOX_DEGREE,
-        SBOX_REGISTERS,
-        HALF_FULL_ROUNDS,
-        PARTIAL_ROUNDS,
-    >(inputs, &constants, 0)
-    .transpose();
+    let witness_matrix = generate_trace_rows(inputs, 0).transpose();
 
     let mut witness = witness_matrix
         .rows()
         .map(|col| whir_p3::poly::evals::EvaluationsList::new(col.collect()))
         .collect::<Vec<_>>();
 
+    // Compute the actual log length (log2 of number of rows per column) as required by AirTable.
+    let log_length_actual = witness
+        .iter()
+        .map(|w| w.num_variables())
+        .max()
+        .expect("non-empty witness");
+
     let preprocessed_columns = witness.drain(..n_preprocessed_columns).collect::<Vec<_>>();
 
     let table = AirTable::<F, EF, _>::new(
-        poseidon_air,
-        log_n_rows,
+        keccak_air,
+        log_length_actual,
         settings.univariate_skips,
         preprocessed_columns,
         3,
@@ -186,7 +167,7 @@ pub fn prove_poseidon2(
                 merkle_hash,
                 merkle_compress,
                 &mut verifier_state,
-                log_n_rows,
+                log_length,
             )
             .unwrap();
         verifier_time = time.elapsed();
@@ -194,8 +175,8 @@ pub fn prove_poseidon2(
 
     let proof_size = prover_state.proof_data().len() as f64 * (F::ORDER_U64 as f64).log2() / 8.0;
 
-    Poseidon2Benchmark {
-        log_n_rows,
+    KeccakBenchmark {
+        log_n_rows: log_length_actual,
         settings,
         prover_time,
         verifier_time,
