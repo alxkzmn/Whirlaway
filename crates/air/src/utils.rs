@@ -1,15 +1,13 @@
 use p3_challenger::{FieldChallenger, GrindingChallenger};
 use p3_field::{ExtensionField, Field, TwoAdicField};
 use rayon::prelude::*;
-use utils::log2_up;
-use whir_p3::{
-    fiat_shamir::{errors::ProofError, prover::ProverState},
-    poly::{evals::EvaluationsList, multilinear::MultilinearPoint},
-};
+use utils::fiat_shamir::ProverState;
+use utils::{ProofError, log2_up};
+use whir_p3::poly::{evals::EvaluationsList, multilinear::MultilinearPoint};
 
 use crate::{AirSettings, table::AirTable};
 
-pub(crate) fn matrix_up_lde<F: Field>(point: &[F]) -> F {
+pub fn matrix_up_lde<F: Field>(point: &[F]) -> F {
     /*
         Matrix UP:
 
@@ -31,12 +29,12 @@ pub(crate) fn matrix_up_lde<F: Field>(point: &[F]) -> F {
     assert_eq!(point.len() % 2, 0);
     let n = point.len() / 2;
     let (s1, s2) = point.split_at(n);
-    MultilinearPoint(s1.to_vec()).eq_poly_outside(&MultilinearPoint(s2.to_vec()))
+    MultilinearPoint::new(s1.to_vec()).eq_poly(&MultilinearPoint::new(s2.to_vec()))
         + point[..point.len() - 1].iter().copied().product::<F>()
             * (F::ONE - point[point.len() - 1] * F::TWO)
 }
 
-pub(crate) fn matrix_down_lde<F: Field>(point: &[F]) -> F {
+pub fn matrix_down_lde<F: Field>(point: &[F]) -> F {
     /*
         Matrix DOWN:
 
@@ -137,9 +135,7 @@ fn next_mle<F: Field>(point: &[F]) -> F {
         .sum()
 }
 
-pub(crate) fn columns_up_and_down<F: Field>(
-    columns: &[&EvaluationsList<F>],
-) -> Vec<EvaluationsList<F>> {
+pub fn columns_up_and_down<F: Field>(columns: &[&EvaluationsList<F>]) -> Vec<EvaluationsList<F>> {
     columns
         .par_iter()
         .map(|c| column_up(c))
@@ -147,14 +143,17 @@ pub(crate) fn columns_up_and_down<F: Field>(
         .collect()
 }
 
-pub(crate) fn column_up<F: Field>(column: &EvaluationsList<F>) -> EvaluationsList<F> {
-    let mut up = column.clone();
-    up.evals_mut()[column.num_evals() - 1] = up.evals()[column.num_evals() - 2];
-    up
+pub fn column_up<F: Field>(column: &EvaluationsList<F>) -> EvaluationsList<F> {
+    let mut evals = column.as_slice().to_vec();
+    let last = evals[evals.len() - 2];
+    if let Some(tail) = evals.last_mut() {
+        *tail = last;
+    }
+    EvaluationsList::new(evals)
 }
 
-pub(crate) fn column_down<F: Field>(column: &EvaluationsList<F>) -> EvaluationsList<F> {
-    let mut down = column.evals()[1..].to_vec();
+pub fn column_down<F: Field>(column: &EvaluationsList<F>) -> EvaluationsList<F> {
+    let mut down = column.as_slice()[1..].to_vec();
     down.push(*down.last().unwrap());
     EvaluationsList::new(down)
 }

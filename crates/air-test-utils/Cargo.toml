@@ -1,0 +1,19 @@
+[package]
+name = "air-test-utils"
+version.workspace = true
+edition.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+air.workspace = true
+keccak_air.workspace = true
+p3-air.workspace = true
+p3-challenger.workspace = true
+p3-field.workspace = true
+p3-koala-bear.workspace = true
+p3-matrix.workspace = true
+p3-symmetric.workspace = true
+rand.workspace = true
+whir-p3.workspace = true

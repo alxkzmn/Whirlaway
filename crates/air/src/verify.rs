@@ -1,18 +1,17 @@
 use p3_air::Air;
-use p3_challenger::{FieldChallenger, GrindingChallenger};
+use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger};
 use p3_field::{ExtensionField, Packable, TwoAdicField, cyclic_subgroup_known_order, dot_product};
 use p3_symmetric::{CryptographicHasher, PseudoCompressionFunction};
 use rand::distr::{Distribution, StandardUniform};
 use serde::{Deserialize, Serialize};
 use sumcheck::{SumcheckComputation, SumcheckError, SumcheckGrinding};
 use tracing::instrument;
-use utils::{ConstraintFolder, fold_multilinear_in_large_field, log2_up};
+use utils::fiat_shamir::VerifierState;
+use utils::{ConstraintFolder, ProofError, fold_multilinear_in_large_field, log2_up};
 use whir_p3::{
-    fiat_shamir::{errors::ProofError, verifier::VerifierState},
     poly::{evals::EvaluationsList, multilinear::MultilinearPoint},
     whir::{
-        committer::reader::CommitmentReader,
-        statement::{Statement, weights::Weights},
+        committer::reader::CommitmentReader, constraints::statement::EqStatement, proof::WhirProof,
         verifier::Verifier,
     },
 };
@@ -53,29 +52,39 @@ impl<
 > AirTable<F, EF, A>
 {
     #[instrument(name = "air table: verify", skip_all)]
-    pub fn verify<H, C, Challenger, const DIGEST_ELEMS: usize>(
+    pub fn verify<H, C, Challenger, W, const DIGEST_ELEMS: usize>(
         &self,
         settings: &AirSettings,
         merkle_hash: H,
         merkle_compress: C,
         verifier_state: &mut VerifierState<F, EF, Challenger>,
+        public_values: &[F],
         log_length: usize,
+        whir_proof: &WhirProof<F, EF, W, DIGEST_ELEMS>,
     ) -> Result<(), AirVerifError>
     where
-        StandardUniform: Distribution<EF> + Distribution<F>,
-        Challenger: FieldChallenger<F> + GrindingChallenger<Witness = F>,
-        H: CryptographicHasher<F, [F; DIGEST_ELEMS]> + Sync,
-        C: PseudoCompressionFunction<[F; DIGEST_ELEMS], 2> + Sync,
-        [F; DIGEST_ELEMS]: Serialize + for<'de> Deserialize<'de>,
+        Challenger: FieldChallenger<F>
+            + GrindingChallenger<Witness = F>
+            + CanObserve<p3_symmetric::Hash<F, W, DIGEST_ELEMS>>,
+        H: CryptographicHasher<F, [W; DIGEST_ELEMS]> + Sync,
+        C: PseudoCompressionFunction<[W; DIGEST_ELEMS], 2> + Sync,
+        W: p3_field::PackedValue<Value = W> + Eq + Send + Sync + Copy,
+        [W; DIGEST_ELEMS]: Serialize + for<'de> Deserialize<'de>,
         F: Eq + Packable,
+        F::Packing: Eq + Send + Sync,
     {
+        assert_eq!(public_values.len(), self.num_public_values);
+        let public_values_ext = public_values
+            .iter()
+            .copied()
+            .map(EF::from)
+            .collect::<Vec<_>>();
         let whir_params = self.build_whir_params(settings, merkle_hash, merkle_compress);
 
         let commitment_reader = CommitmentReader::new(&whir_params);
         let whir_verifier = Verifier::new(&whir_params);
         let parsed_commitment = commitment_reader
-            .parse_commitment::<DIGEST_ELEMS>(verifier_state)
-            .map_err(|_| AirVerifError::InvalidPcsCommitment)?;
+            .parse_commitment::<W, DIGEST_ELEMS>(whir_proof, verifier_state.challenger_mut());
 
         verifier_state.check_pow_grinding(
             settings
@@ -116,24 +125,26 @@ impl<
         let outer_selector_evals = self
             .univariate_selectors
             .iter()
-            .map(|s| s.evaluate(outer_sumcheck_challenge.point[0]))
+            .map(|s| s.evaluate_extension(outer_sumcheck_challenge.point[0]))
             .collect::<Vec<_>>();
         let preprocessed_up = self
             .preprocessed_columns
             .iter()
             .map(|c| {
-                fold_multilinear_in_large_field(&column_up(c), &outer_selector_evals).evaluate(
-                    &MultilinearPoint(outer_sumcheck_challenge.point[1..].to_vec()),
-                )
+                fold_multilinear_in_large_field(&column_up(c), &outer_selector_evals)
+                    .evaluate_hypercube_ext::<F>(&MultilinearPoint::new(
+                        outer_sumcheck_challenge.point[1..].to_vec(),
+                    ))
             })
             .collect::<Vec<_>>();
         let preprocessed_down = self
             .preprocessed_columns
             .iter()
             .map(|c| {
-                fold_multilinear_in_large_field(&column_down(c), &outer_selector_evals).evaluate(
-                    &MultilinearPoint(outer_sumcheck_challenge.point[1..].to_vec()),
-                )
+                fold_multilinear_in_large_field(&column_down(c), &outer_selector_evals)
+                    .evaluate_hypercube_ext::<F>(&MultilinearPoint::new(
+                        outer_sumcheck_challenge.point[1..].to_vec(),
+                    ))
             })
             .collect::<Vec<_>>();
 
@@ -150,17 +161,18 @@ impl<
             &global_point,
             &cyclic_subgroup_known_order(constraints_batching_scalar, self.n_constraints)
                 .collect::<Vec<_>>(),
+            &public_values_ext,
         );
 
         let zerocheck_selector_evals = self
             .univariate_selectors
             .iter()
-            .map(|s| s.evaluate(zerocheck_challenges[0]));
+            .map(|s| s.evaluate_extension(zerocheck_challenges[0]));
         if dot_product::<EF, _, _>(
             zerocheck_selector_evals.clone(),
             outer_selector_evals.iter().copied(),
-        ) * MultilinearPoint(zerocheck_challenges[1..].to_vec()).eq_poly_outside(
-            &MultilinearPoint(outer_sumcheck_challenge.point[1..].to_vec()),
+        ) * MultilinearPoint::new(zerocheck_challenges[1..].to_vec()).eq_poly(
+            &MultilinearPoint::new(outer_sumcheck_challenge.point[1..].to_vec()),
         ) * global_constraint_eval
             != outer_sumcheck_challenge.value
         {
@@ -183,20 +195,23 @@ impl<
         let sub_evals =
             verifier_state.next_extension_scalars_vec(1 << settings.univariate_skips)?;
 
+        let column_batching_evals =
+            EvaluationsList::new_from_point(&columns_batching_scalars, EF::ONE).as_slice()
+                [..self.n_witness_columns()]
+                .to_vec();
+        let batched_witness_up = dot_product::<EF, _, _>(
+            witness_up.iter().copied(),
+            column_batching_evals.iter().copied(),
+        );
+        let batched_witness_down = dot_product::<EF, _, _>(
+            witness_down.iter().copied(),
+            column_batching_evals.iter().copied(),
+        );
+
         if dot_product::<EF, _, _>(
             sub_evals.iter().copied(),
             outer_selector_evals.iter().copied(),
-        ) != dot_product::<EF, _, _>(
-            witness_up.iter().copied(),
-            EvaluationsList::eval_eq(&columns_batching_scalars).evals()[..self.n_witness_columns()]
-                .iter()
-                .copied(),
-        ) + dot_product::<EF, _, _>(
-            witness_down.iter().copied(),
-            EvaluationsList::eval_eq(&columns_batching_scalars).evals()[..self.n_witness_columns()]
-                .iter()
-                .copied(),
-        ) * alpha
+        ) != batched_witness_up + alpha * batched_witness_down
         {
             return Err(AirVerifError::SumMismatch);
         }
@@ -216,7 +231,8 @@ impl<
         )?;
 
         if batched_inner_sum
-            != EvaluationsList::new(sub_evals).evaluate(&MultilinearPoint(epsilons.clone()))
+            != EvaluationsList::new(sub_evals)
+                .evaluate_hypercube_ext::<F>(&MultilinearPoint::new(epsilons.clone()))
         {
             return Err(AirVerifError::SumMismatch);
         }
@@ -238,13 +254,16 @@ impl<
         ]
         .concat();
 
-        let mut statement = Statement::<EF>::new(final_point.len());
-        statement.add_constraint(
-            Weights::evaluation(MultilinearPoint(final_point)),
-            expected_final_value,
-        );
+        let mut statement = EqStatement::initialize(final_point.len());
+        statement
+            .add_evaluated_constraint(MultilinearPoint::new(final_point), expected_final_value);
         whir_verifier
-            .verify(verifier_state, &parsed_commitment, &statement)
+            .verify::<F, W, W, DIGEST_ELEMS>(
+                whir_proof,
+                verifier_state.challenger_mut(),
+                &parsed_commitment,
+                statement,
+            )
             .map_err(|_| AirVerifError::InvalidPcsOpening)?;
 
         Ok(())

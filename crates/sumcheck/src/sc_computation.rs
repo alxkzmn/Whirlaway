@@ -11,7 +11,7 @@ where
     NF: ExtensionField<F>,
     EF: ExtensionField<NF>,
 {
-    fn eval(&self, point: &[NF], alpha_powers: &[EF]) -> EF;
+    fn eval(&self, point: &[NF], alpha_powers: &[EF], public_values: &[NF]) -> EF;
 }
 
 impl<F, NF, EF, A> SumcheckComputation<F, NF, EF> for A
@@ -21,10 +21,11 @@ where
     EF: ExtensionField<NF> + ExtensionField<F>,
     A: for<'a> Air<ConstraintFolder<'a, F, NF, EF>>,
 {
-    fn eval(&self, point: &[NF], alpha_powers: &[EF]) -> EF {
+    fn eval(&self, point: &[NF], alpha_powers: &[EF], public_values: &[NF]) -> EF {
         assert_eq!(A::width(self) * 2, point.len());
         let mut folder = ConstraintFolder {
             main: RowMajorMatrixView::new(point, point.len() / 2),
+            public_values,
             alpha_powers,
             accumulator: EF::ZERO,
             constraint_index: 0,
@@ -46,6 +47,7 @@ where
         point: &[F::Packing],
         alpha_powers: &[EF],
         decomposed_alpha_powers: &[Vec<F>],
+        public_values: &[F::Packing],
     ) -> impl Iterator<Item = EF> + Send + Sync;
 }
 
@@ -60,11 +62,13 @@ where
         point: &[F::Packing],
         alpha_powers: &[EF],
         decomposed_alpha_powers: &[Vec<F>],
+        public_values: &[F::Packing],
     ) -> impl Iterator<Item = EF> {
         let mut folder = ConstraintFolderPacked {
             main: RowMajorMatrixView::new(point, point.len() / 2),
-            alpha_powers: alpha_powers,
-            decomposed_alpha_powers: decomposed_alpha_powers,
+            public_values,
+            alpha_powers,
+            decomposed_alpha_powers,
             accumulator: <EF as ExtensionField<F>>::ExtensionPacking::ZERO,
             constraint_index: 0,
         };

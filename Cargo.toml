@@ -101,37 +101,43 @@ too_long_first_doc_paragraph = "allow"
 [workspace.dependencies]
 # Local
 air = { path = "crates/air" }
+air-test-utils = { path = "crates/air-test-utils" }
 sumcheck = { path = "crates/sumcheck" }
 utils = { path = "crates/utils" }
 
 # External
 rand = "0.9.1"
 sha3 = "0.10.8"
-rayon = "1.5.1"
+rayon = "1.11.0"
 serde = { version = "1.0.219", features = ["derive"] }
 derive_more = { version = "2.0.1", features = ["full"] }
 tracing = "0.1.26"
 tracing-subscriber = { version = "0.3.19", features = ["std", "env-filter"] }
 tracing-forest = { version = "0.1.6", features = ["ansi", "smallvec"] }
-p3-koala-bear = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
-p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "d0c4a36" }
+p3-koala-bear = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-baby-bear = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-field = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-poseidon2 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-matrix = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-blake3 = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-symmetric = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-uni-stark = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-poseidon2-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-keccak-air = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-keccak = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-goldilocks = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-challenger = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-util = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-dft = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+p3-maybe-rayon = { git = "https://github.com/Plonky3/Plonky3.git", rev = "a9d5bbb" }
+keccak_air = { path = "./keccak_air" }
 
-whir-p3 = { git = "https://github.com/tcoratger/whir-p3" }
+whir-p3 = { git = "https://github.com/alxkzmn/whir-p3", rev = "385a129" }
 
 [dependencies]
 air.workspace = true
+p3-air.workspace = true
 p3-field.workspace = true
 tracing.workspace = true
 p3-koala-bear.workspace = true
@@ -139,18 +145,40 @@ p3-baby-bear.workspace = true
 p3-poseidon2.workspace = true
 rand.workspace = true
 p3-poseidon2-air.workspace = true
-p3-keccak-air.workspace = true
+keccak_air.workspace = true
 p3-matrix.workspace = true
 p3-challenger.workspace = true
 p3-symmetric.workspace = true
+p3-keccak.workspace = true
+sha3.workspace = true
 tracing-forest.workspace = true
 tracing-subscriber.workspace = true
 whir-p3.workspace = true
 p3-uni-stark.workspace = true
+utils.workspace = true
+bincode = { version = "1.3.3" }
+serde = { workspace = true }
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = { version = "0.5", features = ["html_reports"] }
+utils = { path = "crates/utils" }
+keccak_air = { workspace = true, features = ["test-utils"] }
+p3-air.workspace = true
+p3-baby-bear.workspace = true
+sumcheck = { path = "crates/sumcheck" }
+p3-challenger.workspace = true
+p3-symmetric.workspace = true
+p3-poseidon2.workspace = true
+whir-p3.workspace = true
+
+[[bench]]
+name = "folding_benchmarks"
+harness = false
 
 [[bench]]
 name = "poseidon2_proof"
+harness = false
+
+[[bench]]
+name = "keccak_proof"
 harness = false

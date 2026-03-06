@@ -2,15 +2,16 @@
 
 mod prove;
 pub mod table;
-mod uni_skip_utils;
-mod utils;
-mod verify;
+pub mod uni_skip_utils;
+pub mod utils;
+pub mod verify;
 
 const WHIR_POW_BITS: usize = 16;
 
+use serde::{Deserialize, Serialize};
 use whir_p3::parameters::{FoldingFactor, errors::SecurityAssumption};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AirSettings {
     pub security_bits: usize,
     pub whir_soudness_type: SecurityAssumption,
@@ -36,6 +37,19 @@ impl AirSettings {
             whir_log_inv_rate,
             univariate_skips,
             whir_initial_domain_reduction_factor,
+        }
+    }
+}
+
+impl Default for AirSettings {
+    fn default() -> Self {
+        Self {
+            security_bits: 128,
+            whir_soudness_type: SecurityAssumption::CapacityBound,
+            whir_folding_factor: FoldingFactor::ConstantFromSecondRound(7, 4),
+            whir_log_inv_rate: 1,
+            univariate_skips: 4,
+            whir_initial_domain_reduction_factor: 5,
         }
     }
 }

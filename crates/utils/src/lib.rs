@@ -17,3 +17,9 @@ pub use multilinear::*;
 
 mod packed_constraints_folder;
 pub use packed_constraints_folder::*;
+
+mod dense_poly;
+pub use dense_poly::*;
+
+pub mod fiat_shamir;
+pub use fiat_shamir::*;
