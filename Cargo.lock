@@ -31,8 +31,8 @@ dependencies = [
  "serde",
  "sumcheck",
  "tracing",
- "utils",
  "whir-p3",
+ "whirlaway-utils",
 ]
 
 [[package]]
@@ -1560,6 +1560,7 @@ dependencies = [
  "tracing",
  "tracing-forest",
  "tracing-subscriber",
+ "utils",
  "whir-p3",
 ]
 

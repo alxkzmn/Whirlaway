@@ -103,7 +103,7 @@ too_long_first_doc_paragraph = "allow"
 air = { path = "crates/air" }
 air-test-utils = { path = "crates/air-test-utils" }
 sumcheck = { path = "crates/sumcheck" }
-utils = { path = "crates/utils" }
+utils = { package = "whirlaway-utils", path = "crates/utils" }
 
 # External
 rand = "0.10.0"
@@ -161,7 +161,7 @@ serde = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
-utils = { path = "crates/utils" }
+utils = { package = "whirlaway-utils", path = "crates/utils" }
 keccak_air = { workspace = true, features = ["test-utils"] }
 p3-air.workspace = true
 p3-baby-bear.workspace = true

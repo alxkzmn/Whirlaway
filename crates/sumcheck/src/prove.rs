@@ -3,7 +3,6 @@ use std::{any::TypeId, borrow::Borrow};
 use p3_challenger::{FieldChallenger, GrindingChallenger};
 use p3_field::{BasedVectorSpace, PackedValue};
 use p3_field::{ExtensionField, Field, TwoAdicField};
-use rand::distr::{Distribution, StandardUniform};
 use rayon::prelude::*;
 use tracing::instrument;
 use utils::{
@@ -161,6 +160,7 @@ where
     } else {
         0
     };
+
     for z in start..=comp_degree * ((1 << skips) - 1) {
         let sum_z = if z == (1 << skips) - 1 {
             if let Some(eq_factor) = eq_factor {
