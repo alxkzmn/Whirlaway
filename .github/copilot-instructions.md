@@ -128,7 +128,7 @@ Common mistakes and fixes:
 
 ### `p3_uni_stark::check_constraints` is `pub(crate)` — not usable externally
 
-- At the pinned plonky3 revision (`a9d5bbb`), `check_constraints` and `DebugConstraintBuilder` cannot be used from crates outside `p3_uni_stark`.
+- At the pinned Plonky3 revision (`c38eb05`), `check_constraints` and `DebugConstraintBuilder` cannot be used from crates outside `p3_uni_stark`.
 - **Workaround for negative tests**: Use the full prove→verify pipeline and assert failure, rather than trying to check constraints directly.
 
 ### `PackedValue::from_fn` for scalar broadcast

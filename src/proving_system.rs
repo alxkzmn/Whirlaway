@@ -282,7 +282,16 @@ where
             table.log_length,
             &proof.whir_proof,
         )
-        .map_err(|e| format!("verify failed: {e:?}"))
+        .map_err(|e| format!("verify failed: {e:?}"))?;
+
+    if !verifier_state.is_fully_consumed() {
+        return Err(format!(
+            "verify failed: trailing proof_data elements ({})",
+            verifier_state.remaining_proof_data_len()
+        ));
+    }
+
+    Ok(())
 }
 
 pub fn preprocessing_size<C, S, const DIGEST_ELEMS: usize>(
